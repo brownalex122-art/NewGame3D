@@ -4,7 +4,7 @@ const { Server } = require("socket.io");
 const fs = require("fs");
 const path = require("path");
 
-const WORLD_FILE = path.join(__dirname, "world.json");
+const WORLD_FILE = path.join(process.env.NODE_ENV === "production" ? "/data" : __dirname, "world.json");
 
 // Load or create world data with rolling hills
 let worldData = { zones: {} };
@@ -206,3 +206,4 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () =>
   console.log(`🚀 Mini Azeroth server running on port ${PORT}`),
 );
+
