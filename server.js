@@ -6,6 +6,13 @@ const path = require("path");
 
 const WORLD_FILE = path.join(process.env.NODE_ENV === "production" ? "/data" : __dirname, "world.json");
 
+// ← NEW CODE: Create the folder so the first world.json can be saved
+const WORLD_DIR = path.dirname(WORLD_FILE);
+if (!fs.existsSync(WORLD_DIR)) {
+  fs.mkdirSync(WORLD_DIR, { recursive: true });
+  console.log("✅ Created /data folder for persistent world.json");
+}
+
 // Load or create world data with rolling hills
 let worldData = { zones: {} };
 if (fs.existsSync(WORLD_FILE)) {
@@ -206,4 +213,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () =>
   console.log(`🚀 Mini Azeroth server running on port ${PORT}`),
 );
+
 
