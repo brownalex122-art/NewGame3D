@@ -1,259 +1,275 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Mini Azeroth 3D - Phase 2.5 Polished</title>
-    <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-        background: #000;
-        font-family: Arial, sans-serif;
-      }
-      canvas {
-        display: block;
-      }
-      #uiOverlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 200;
-        pointer-events: none;
-      }
-      .screen {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(8, 20, 8, 0.97);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #0f0;
-      }
-      .panel {
-        background: rgba(0, 0, 0, 0.92);
-        border: 3px solid #0f0;
-        padding: 40px 70px;
-        text-align: center;
-        box-shadow: 0 0 50px #0f0;
-        pointer-events: all;
-        max-width: 500px;
-      }
-      h1 {
-        font-size: 48px;
-        margin: 0 0 25px 0;
-        text-shadow: 0 0 15px #0f0;
-      }
-      input,
-      button {
-        padding: 14px 20px;
-        font-size: 18px;
-        margin: 8px;
-      }
-      input {
-        width: 320px;
-        background: #111;
-        border: 2px solid #0f0;
-        color: #0f0;
-      }
-      button {
-        background: #0f0;
-        color: #000;
-        border: none;
-        cursor: pointer;
-        font-weight: bold;
-      }
-      button:hover {
-        background: #0a0;
-      }
-      button.selected {
-        background: #0a0;
-        border: 3px solid #ff0;
-        box-shadow: 0 0 15px #ff0;
-      }
-      .char-list button {
-        width: 100%;
-        margin: 6px 0;
-        text-align: left;
-        padding: 12px 20px;
-        background: rgba(255, 255, 255, 0.1);
-        border: 2px solid #0f0;
-      }
-      .char-list button:hover {
-        background: rgba(255, 255, 255, 0.2);
-      }
-      #hud {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        background: rgba(0, 0, 0, 0.85);
-        border: 2px solid #0f0;
-        padding: 10px 18px;
-        color: #0f0;
-        display: none;
-        z-index: 150;
-        font-size: 16px;
-      }
-      #logoutBtn {
-        margin-left: 20px;
-        background: #400;
-        color: #faa;
-        border: 1px solid #f66;
-        cursor: pointer;
-      }
-      #instructions {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        color: #0f0;
-        background: rgba(0, 0, 0, 0.9);
-        padding: 15px;
-        border: 2px solid #0f0;
-        z-index: 100;
-        line-height: 1.5;
-        max-width: 420px;
-      }
 
-      #coordsPanel {
-        position: absolute;
-        top: 120px;
-        left: 12px;
-        background: rgba(0, 0, 0, 0.88);
-        border: 2px solid #0f0;
-        padding: 12px 18px;
-        color: #0f0;
-        font-family: monospace;
-        font-size: 15px;
-        line-height: 1.45;
-        border-radius: 4px;
-        box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
-        display: none;
-        z-index: 150;
-        min-width: 165px;
-        pointer-events: none;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <title>Mini Azeroth 3D - Phase 2.5 Polished</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, sans-serif;
+    }
 
-      #editorPanel {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: rgba(0, 0, 0, 0.95);
-        border: 3px solid #ff0;
-        padding: 25px 40px;
-        color: #ff0;
-        font-family: monospace;
-        text-align: center;
-        display: none;
-        z-index: 300;
-        box-shadow: 0 0 40px #ff0;
-        pointer-events: auto;
-        min-width: 320px;
-      }
-      #editorPanel h2 {
-        margin: 0 0 15px 0;
-        color: #ff0;
-        text-shadow: 0 0 10px #ff0;
-      }
-      #deleteBtn {
-        background: #400;
-        color: #faa;
-        border: 2px solid #f66;
-        padding: 12px 30px;
-        font-size: 18px;
-        margin-top: 15px;
-        cursor: pointer;
-      }
-      #deleteBtn:hover {
-        background: #600;
-      }
+    canvas {
+      display: block;
+    }
 
-      #nameCustomPanel {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: rgba(0, 0, 0, 0.96);
-        border: 3px solid #0f0;
-        padding: 30px;
-        color: #0f0;
-        display: none;
-        z-index: 250;
-        width: 340px;
-        text-align: center;
-        box-shadow: 0 0 40px #0f0;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="uiOverlay">
-      <!-- Account Login -->
-      <div id="accountScreen" class="screen">
-        <div class="panel">
-          <h1>Mini Azeroth</h1>
-          <p>Enter Account Name</p>
-          <input
-            type="text"
-            id="accountName"
-            placeholder="e.g. WoozyWheezy"
-            maxlength="30"
-          />
-          <br /><br />
-          <button id="accountContinue">CONTINUE</button>
-        </div>
+    #uiOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 200;
+      pointer-events: none;
+    }
+
+    .screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(8, 20, 8, 0.97);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #0f0;
+    }
+
+    .panel {
+      background: rgba(0, 0, 0, 0.92);
+      border: 3px solid #0f0;
+      padding: 40px 70px;
+      text-align: center;
+      box-shadow: 0 0 50px #0f0;
+      pointer-events: all;
+      max-width: 500px;
+    }
+
+    h1 {
+      font-size: 48px;
+      margin: 0 0 25px 0;
+      text-shadow: 0 0 15px #0f0;
+    }
+
+    input,
+    button {
+      padding: 14px 20px;
+      font-size: 18px;
+      margin: 8px;
+    }
+
+    input {
+      width: 320px;
+      background: #111;
+      border: 2px solid #0f0;
+      color: #0f0;
+    }
+
+    button {
+      background: #0f0;
+      color: #000;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #0a0;
+    }
+
+    button.selected {
+      background: #0a0;
+      border: 3px solid #ff0;
+      box-shadow: 0 0 15px #ff0;
+    }
+
+    .char-list button {
+      width: 100%;
+      margin: 6px 0;
+      text-align: left;
+      padding: 12px 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px solid #0f0;
+    }
+
+    .char-list button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    #hud {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(0, 0, 0, 0.85);
+      border: 2px solid #0f0;
+      padding: 10px 18px;
+      color: #0f0;
+      display: none;
+      z-index: 150;
+      font-size: 16px;
+    }
+
+    #logoutBtn {
+      margin-left: 20px;
+      background: #400;
+      color: #faa;
+      border: 1px solid #f66;
+      cursor: pointer;
+    }
+
+    #instructions {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #0f0;
+      background: rgba(0, 0, 0, 0.9);
+      padding: 15px;
+      border: 2px solid #0f0;
+      z-index: 100;
+      line-height: 1.5;
+      max-width: 420px;
+    }
+
+    #coordsPanel {
+      position: absolute;
+      top: 120px;
+      left: 12px;
+      background: rgba(0, 0, 0, 0.88);
+      border: 2px solid #0f0;
+      padding: 12px 18px;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 15px;
+      line-height: 1.45;
+      border-radius: 4px;
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+      display: none;
+      z-index: 150;
+      min-width: 165px;
+      pointer-events: none;
+    }
+
+    #editorPanel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.95);
+      border: 3px solid #ff0;
+      padding: 25px 40px;
+      color: #ff0;
+      font-family: monospace;
+      text-align: center;
+      display: none;
+      z-index: 300;
+      box-shadow: 0 0 40px #ff0;
+      pointer-events: auto;
+      min-width: 320px;
+      user-select: none;
+      /* prevents text selection while dragging */
+      -webkit-user-select: none;
+      touch-action: none;
+      /* helps with touch dragging */
+      cursor: default;
+    }
+
+    #editorPanel h2 {
+      margin: 0 0 15px 0;
+      color: #ff0;
+      text-shadow: 0 0 10px #ff0;
+      padding: 8px 12px;
+      border-bottom: 2px solid #ff0;
+      background: rgba(40, 40, 0, 0.4);
+      margin: -25px -40px 20px -40px;
+      /* extends to edges */
+    }
+
+    #deleteBtn {
+      background: #400;
+      color: #faa;
+      border: 2px solid #f66;
+      padding: 12px 30px;
+      font-size: 18px;
+      margin-top: 15px;
+      cursor: pointer;
+    }
+
+    #deleteBtn:hover {
+      background: #600;
+    }
+
+    #nameCustomPanel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.96);
+      border: 3px solid #0f0;
+      padding: 30px;
+      color: #0f0;
+      display: none;
+      z-index: 250;
+      width: 340px;
+      text-align: center;
+      box-shadow: 0 0 40px #0f0;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="uiOverlay">
+    <!-- Account Login -->
+    <div id="accountScreen" class="screen">
+      <div class="panel">
+        <h1>Mini Azeroth</h1>
+        <p>Enter Account Name</p>
+        <input type="text" id="accountName" placeholder="e.g. WoozyWheezy" maxlength="30" />
+        <br /><br />
+        <button id="accountContinue">CONTINUE</button>
       </div>
+    </div>
 
-      <!-- Character List -->
-      <div id="charListScreen" class="screen" style="display: none">
-        <div class="panel">
-          <h1>My Characters</h1>
-          <p>Account: <b id="currentAccount"></b></p>
-          <div id="charList" class="char-list"></div>
-          <br />
-          <button id="createNewBtn" style="background: #060">
-            Create New Character
-          </button>
-        </div>
+    <!-- Character List -->
+    <div id="charListScreen" class="screen" style="display: none">
+      <div class="panel">
+        <h1>My Characters</h1>
+        <p>Account: <b id="currentAccount"></b></p>
+        <div id="charList" class="char-list"></div>
+        <br />
+        <button id="createNewBtn" style="background: #060">
+          Create New Character
+        </button>
       </div>
+    </div>
 
-      <!-- Creation -->
-      <div id="creationScreen" class="screen" style="display: none">
-        <div class="panel">
-          <h1>Character Creation</h1>
-          <p>Account: <b id="currentAccountCreate"></b></p>
-          <h3>Character Name</h3>
-          <input
-            type="text"
-            id="createName"
-            placeholder="Character Name"
-            maxlength="20"
-          />
-          <h3>Race</h3>
-          <button class="race-btn" data-race="Human">Human</button>
-          <button class="race-btn" data-race="Orc">Orc</button>
-          <button class="race-btn" data-race="Forsaken">Forsaken</button>
-          <button class="race-btn" data-race="Night Elf">Night Elf</button>
-          <h3>Gender</h3>
-          <button class="gender-btn" data-gender="Male">Male</button>
-          <button class="gender-btn" data-gender="Female">Female</button>
-          <br /><br />
-          <button
-            id="enterWorldBtn"
-            style="background: #060; padding: 16px 60px; font-size: 20px"
-          >
-            ENTER AZEROTH
-          </button>
-        </div>
+    <!-- Creation -->
+    <div id="creationScreen" class="screen" style="display: none">
+      <div class="panel">
+        <h1>Character Creation</h1>
+        <p>Account: <b id="currentAccountCreate"></b></p>
+        <h3>Character Name</h3>
+        <input type="text" id="createName" placeholder="Character Name" maxlength="20" />
+        <h3>Race</h3>
+        <button class="race-btn" data-race="Human">Human</button>
+        <button class="race-btn" data-race="Orc">Orc</button>
+        <button class="race-btn" data-race="Forsaken">Forsaken</button>
+        <button class="race-btn" data-race="Night Elf">Night Elf</button>
+        <h3>Gender</h3>
+        <button class="gender-btn" data-gender="Male">Male</button>
+        <button class="gender-btn" data-gender="Female">Female</button>
+        <br /><br />
+        <button id="enterWorldBtn" style="background: #060; padding: 16px 60px; font-size: 20px">
+          ENTER AZEROTH
+        </button>
       </div>
+    </div>
 
-      <!-- Chat -->
-      <div
-        id="chatContainer"
-        style="
+    <!-- Chat -->
+    <div id="chatContainer" style="
           display: none;
           position: absolute;
           bottom: 20px;
@@ -265,24 +281,16 @@
           z-index: 180;
           overflow: hidden;
           pointer-events: auto;
-        "
-      >
-        <div
-          id="chatMessages"
-          style="
+        ">
+      <div id="chatMessages" style="
             height: 220px;
             overflow-y: auto;
             padding: 12px;
             color: #0f0;
             font-size: 15px;
             line-height: 1.4;
-          "
-        ></div>
-        <input
-          id="chatInput"
-          type="text"
-          placeholder="Press ENTER to chat..."
-          style="
+          "></div>
+      <input id="chatInput" type="text" placeholder="Press ENTER to chat..." style="
             width: 100%;
             background: #111;
             border: none;
@@ -292,14 +300,11 @@
             font-size: 16px;
             outline: none;
             pointer-events: auto;
-          "
-        />
-      </div>
+          " />
+    </div>
 
-      <!-- Name tags -->
-      <div
-        id="nameTagsContainer"
-        style="
+    <!-- Name tags -->
+    <div id="nameTagsContainer" style="
           position: absolute;
           top: 0;
           left: 0;
@@ -307,173 +312,241 @@
           height: 100%;
           pointer-events: none;
           z-index: 170;
-        "
-      ></div>
+        "></div>
 
-      <!-- Level Editor Panel -->
-      <div id="editorPanel">
-        <h2>🌲 LEVEL EDITOR ACTIVE</h2>
+    <!-- Level Editor Panel -->
+    <div id="editorPanel">
+      <h2>🌲 LEVEL EDITOR ACTIVE</h2>
 
-        <!-- New sculpting toolbar -->
-        <div
-          style="
+      <!-- New sculpting toolbar -->
+      <div style="
             margin: 15px 0;
             display: flex;
             gap: 6px;
             flex-wrap: wrap;
             justify-content: center;
-          "
-        >
-          <button id="btnRaise" class="tool-btn selected">▲ Raise</button>
-          <button id="btnLower" class="tool-btn">▼ Lower</button>
-          <button id="btnFlatten" class="tool-btn">▬ Flatten</button>
-          <button id="btnSmooth" class="tool-btn">⟳ Smooth</button>
-          <button id="btnWater" class="tool-btn">💧 Water</button>
-        </div>
-
-        <div style="margin: 12px 0; text-align: left; font-size: 14px">
-          <label>Brush Size: <span id="sizeValue">25</span></label>
-          <input
-            type="range"
-            id="brushSize"
-            min="5"
-            max="80"
-            value="25"
-            style="width: 100%"
-          />
-
-          <label style="margin-top: 8px; display: block"
-            >Strength: <span id="strengthValue">2.5</span></label
-          >
-          <input
-            type="range"
-            id="brushStrength"
-            min="0.5"
-            max="8"
-            step="0.1"
-            value="2.5"
-            style="width: 100%"
-          />
-        </div>
-
-        <button
-          id="undoBtn"
-          style="background: #440; color: #ff0; margin: 8px 0"
-        >
-          ↩ UNDO LAST EDIT
-        </button>
-        <br /><br />
-        <p style="margin: 8px 0; font-size: 13px; opacity: 0.85">
-          Left-click + drag = sculpt terrain<br />
-          Right-click ground = place tree<br />
-          💧 Water mode: Left-click = add point • Right-click = finish<br />
-          Click water = select • Drag slider = adjust water level
-        </p>
-
-        <!-- Water level slider (appears when water selected) -->
-        <div id="waterLevelContainer" style="display: none; margin: 12px 0">
-          <label>Water Level: <span id="waterLevelValue">600</span></label>
-          <input
-            type="range"
-            id="waterLevelSlider"
-            step="1"
-            style="width: 100%"
-          />
-        </div>
-
-        <button id="deleteBtn">DELETE SELECTED</button>
-        <br /><br />
-        <small>Press L to close editor</small>
+          ">
+        <button id="btnRaise" class="tool-btn selected">▲ Raise</button>
+        <button id="btnLower" class="tool-btn">▼ Lower</button>
+        <button id="btnFlatten" class="tool-btn">▬ Flatten</button>
+        <button id="btnSmooth" class="tool-btn">⟳ Smooth</button>
+        <button id="btnWater" class="tool-btn">💧 Water</button>
       </div>
-    </div>
 
-    <!-- Name Color Picker -->
-    <div id="nameCustomPanel">
-      <h2>Customize Your Name Tag</h2>
-      <p>Pick your name color:</p>
-      <input
-        type="color"
-        id="nameColorPicker"
-        value="#00ff88"
-        style="width: 180px; height: 50px; border: none; background: #111"
-      />
-      <br /><br />
-      <button id="saveNameColorBtn" style="padding: 12px 40px">
-        SAVE COLOR
+      <div style="margin: 12px 0; text-align: left; font-size: 14px">
+        <label>Brush Size: <span id="sizeValue">25</span></label>
+        <input type="range" id="brushSize" min="5" max="80" value="25" style="width: 100%" />
+
+        <label style="margin-top: 8px; display: block">Strength: <span id="strengthValue">2.5</span></label>
+        <input type="range" id="brushStrength" min="0.5" max="8" step="0.1" value="2.5" style="width: 100%" />
+      </div>
+
+      <button id="undoBtn" style="background: #440; color: #ff0; margin: 8px 0">
+        ↩ UNDO LAST EDIT
       </button>
-      <button
-        id="closeNamePanelBtn"
-        style="
+      <br /><br />
+      <p style="margin: 8px 0; font-size: 13px; opacity: 0.85">
+        Left-click + drag = sculpt terrain<br />
+        Right-click ground = place tree<br />
+        💧 Water mode: Left-click = add point • Right-click = finish<br />
+        Click water = select • Drag slider = adjust water level
+      </p>
+
+      <!-- Water level slider (appears when water selected) -->
+      <div id="waterLevelContainer" style="display: none; margin: 12px 0">
+        <label>Water Level: <span id="waterLevelValue">600</span></label>
+        <input type="range" id="waterLevelSlider" step="1" style="width: 100%" />
+      </div>
+
+      <button id="deleteBtn">DELETE SELECTED</button>
+      <br /><br />
+      <small>Press L to close editor</small>
+    </div>
+  </div>
+
+  <!-- Name Color Picker -->
+  <div id="nameCustomPanel">
+    <h2>Customize Your Name Tag</h2>
+    <p>Pick your name color:</p>
+    <input type="color" id="nameColorPicker" value="#00ff88"
+      style="width: 180px; height: 50px; border: none; background: #111" />
+    <br /><br />
+    <button id="saveNameColorBtn" style="padding: 12px 40px">
+      SAVE COLOR
+    </button>
+    <button id="closeNamePanelBtn" style="
           background: #400;
           color: #faa;
           padding: 12px 30px;
           margin-left: 15px;
-        "
-      >
-        CANCEL
-      </button>
-    </div>
+        ">
+      CANCEL
+    </button>
+  </div>
 
-    <div id="hud">
-      <span id="charInfo"
-        >Character: <b id="hudName"></b> • Lv <b id="hudLevel">1</b></span
-      >
-      <button id="logoutBtn">Logout</button>
-    </div>
+  <div id="hud">
+    <span id="charInfo">Character: <b id="hudName"></b> • Lv <b id="hudLevel">1</b></span>
+    <button id="logoutBtn">Logout</button>
+  </div>
 
-    <div id="instructions" style="display: none">
-      <b>Phase 2.5 Complete ✓</b><br />
-      Nametags follow heads perfectly • Color changes instant • AFK visible to
-      all • Fade + full disappear
-    </div>
+  <div id="instructions" style="display: none">
+    <b>Phase 2.5 Complete ✓</b><br />
+    Nametags follow heads perfectly • Color changes instant • AFK visible to
+    all • Fade + full disappear
+  </div>
 
-    <div id="coordsPanel">
-      <div style="margin-bottom: 6px; color: #0f8; font-weight: bold">
-        COORDINATES
-      </div>
-      X: <span id="posX">0.0</span><br />
-      Y: <span id="posY">15.0</span><br />
-      Z: <span id="posZ">0.0</span><br />
-      Facing:
-      <span id="facing" style="color: #ff0; font-weight: bold">North</span>
+  <div id="coordsPanel">
+    <div style="margin-bottom: 6px; color: #0f8; font-weight: bold">
+      COORDINATES
     </div>
+    X: <span id="posX">0.0</span><br />
+    Y: <span id="posY">15.0</span><br />
+    Z: <span id="posZ">0.0</span><br />
+    Facing:
+    <span id="facing" style="color: #ff0; font-weight: bold">North</span>
+  </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
-    <script>
-      console.log(
-        "🎮 Phase 2.5 FINAL - Chat memory removed • A/D turns camera with player • Mouse wheel zoom DISABLED while hovering chat (so you can scroll messages freely)",
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <script>
+    console.log(
+      "🎮 Phase 2.5 FINAL - Chat memory removed • A/D turns camera with player • Mouse wheel zoom DISABLED while hovering chat (so you can scroll messages freely)",
+    );
+
+    // Scene & models (unchanged)
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x223322, 8500, 52000);
+    scene.add(new THREE.AmbientLight(0x666666, 0.65));
+    const sunLight = new THREE.DirectionalLight(0xffeecc, 1.1);
+    sunLight.position.set(150, 250, 100);
+    scene.add(sunLight);
+
+    // ────────────────────────────────────────────────
+    // Skybox - Classic Cubemap (6 faces)
+    // ────────────────────────────────────────────────
+    const skyTextureLoader = new THREE.CubeTextureLoader();
+
+    const skyboxTexture = skyTextureLoader.load([
+      'textures/sky/px.png',  // right   (+X)
+      'textures/sky/nx.png',  // left    (-X)
+      'textures/sky/py.png',  // top     (+Y)
+      'textures/sky/ny.png',  // bottom  (-Y)
+      'textures/sky/pz.png',  // front   (+Z)
+      'textures/sky/nz.png'   // back    (-Z)
+    ]);
+
+    // Optional: make it brighter / more vivid
+    skyboxTexture.encoding = THREE.sRGBEncoding; // if using older three.js, use .colorSpace = THREE.SRGBColorSpace in r152+
+
+    scene.background = skyboxTexture;
+
+    // Optional: also use as environment map for slight reflections on water/trees later
+    scene.environment = skyboxTexture;
+
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      window.innerWidth / window.innerHeight,
+      10, // ← was 0.1  (huge precision win)
+      90000,
+    );
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // === FINAL POLISHED ROLLING HILLS - Smooth multi-directional (strong N/S + round hills) ===
+    const SEG_X = 432;
+    const SEG_Z = 264;
+    const WIDTH = 57600;
+    const DEPTH = 35200;
+
+    let groundGeo = new THREE.PlaneBufferGeometry(WIDTH, DEPTH, SEG_X, SEG_Z);
+    const positions = groundGeo.attributes.position.array;
+
+    let terrainHeights = new Float32Array(positions.length / 3);
+
+    const vertsX = SEG_X + 1;
+
+    for (let i = 0; i < terrainHeights.length; i++) {
+      const ix = i % vertsX;
+      const iz = Math.floor(i / vertsX);
+      const worldX = (ix - SEG_X / 2) * (WIDTH / SEG_X);
+      const worldZ = (iz - SEG_Z / 2) * (DEPTH / SEG_Z);
+
+      let height = 0;
+      let amp = 1;
+      let freq = 0.000085;
+
+      for (let o = 0; o < 6; o++) {
+        // sin*cos product (the magic from Maybe.txt that gives smooth rounded hills)
+        height +=
+          amp *
+          Math.sin(worldX * freq * 1.05) *
+          Math.cos(worldZ * freq * 0.95);
+        // Strong North-South boost on the big layers
+        if (o < 4) height += amp * 0.65 * Math.sin(worldZ * freq * 1.38);
+        amp *= 0.48;
+        freq *= 2.12;
+      }
+
+      terrainHeights[i] = height * 920 + 105;
+      positions[i * 3 + 2] = terrainHeights[i];
+    }
+
+    const minH = Math.min(...terrainHeights);
+    const maxH = Math.max(...terrainHeights);
+    console.log(
+      "✅ FINAL ROLLING HILLS LOADED - smooth natural terrain with strong N/S variation",
+    );
+    console.log(`Height range: ${minH.toFixed(1)} to ${maxH.toFixed(1)}`);
+
+    const groundMat = new THREE.MeshPhongMaterial({
+      color: 0x00bb44,
+      shininess: 5,
+      specular: 0x222222,
+    });
+
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // Black wireframe (high contrast so you can see every bump)
+    const wireMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.75,
+    });
+    const wireMesh = new THREE.Mesh(groundGeo, wireMat);
+    wireMesh.rotation.x = -Math.PI / 2;
+    scene.add(wireMesh);
+
+    groundGeo.attributes.position.needsUpdate = true;
+    groundGeo.computeVertexNormals();
+    groundGeo.computeBoundingBox();
+    groundGeo.computeBoundingSphere();
+
+    function getTerrainHeight(worldX, worldZ) {
+      // Normal terrain raycast
+      terrainRaycaster.set(
+        new THREE.Vector3(worldX, 20000, worldZ),
+        new THREE.Vector3(0, -1, 0),
       );
+      const intersects = terrainRaycaster.intersectObject(ground);
+      if (intersects.length > 0) {
+        return intersects[0].point.y;
+      }
+      return 105;
+    }
+    function sculptAtMouse(e) {
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
-      // Scene & models (unchanged)
-      const scene = new THREE.Scene();
-      scene.fog = new THREE.Fog(0x223322, 8500, 52000);
-      scene.add(new THREE.AmbientLight(0x666666, 0.65));
-      const sunLight = new THREE.DirectionalLight(0xffeecc, 1.1);
-      sunLight.position.set(150, 250, 100);
-      scene.add(sunLight);
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObject(ground);
+      if (intersects.length === 0) return;
 
-      const camera = new THREE.PerspectiveCamera(
-        60,
-        window.innerWidth / window.innerHeight,
-        10, // ← was 0.1  (huge precision win)
-        90000,
-      );
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
-
-      // === FINAL POLISHED ROLLING HILLS - Smooth multi-directional (strong N/S + round hills) ===
-      const SEG_X = 288;
-      const SEG_Z = 176;
-      const WIDTH = 57600;
-      const DEPTH = 35200;
-
-      let groundGeo = new THREE.PlaneBufferGeometry(WIDTH, DEPTH, SEG_X, SEG_Z);
+      const point = intersects[0].point;
       const positions = groundGeo.attributes.position.array;
-
-      let terrainHeights = new Float32Array(positions.length / 3);
-
       const vertsX = SEG_X + 1;
 
       for (let i = 0; i < terrainHeights.length; i++) {
@@ -482,671 +555,563 @@
         const worldX = (ix - SEG_X / 2) * (WIDTH / SEG_X);
         const worldZ = (iz - SEG_Z / 2) * (DEPTH / SEG_Z);
 
-        let height = 0;
-        let amp = 1;
-        let freq = 0.000085;
+        const dist = Math.sqrt(
+          Math.pow(worldX - point.x, 2) + Math.pow(worldZ - point.z, 2),
+        );
+        if (dist > brushSize * 60) continue; // scaled to world units
 
-        for (let o = 0; o < 6; o++) {
-          // sin*cos product (the magic from Maybe.txt that gives smooth rounded hills)
-          height +=
-            amp *
-            Math.sin(worldX * freq * 1.05) *
-            Math.cos(worldZ * freq * 0.95);
-          // Strong North-South boost on the big layers
-          if (o < 4) height += amp * 0.65 * Math.sin(worldZ * freq * 1.38);
-          amp *= 0.48;
-          freq *= 2.12;
+        const falloff = Math.max(0, 1 - dist / (brushSize * 60));
+        let change = brushStrength * falloff * 4;
+
+        if (sculptMode === "raise") {
+          terrainHeights[i] += change;
+        } else if (sculptMode === "lower") {
+          terrainHeights[i] -= change;
+        } else if (sculptMode === "flatten") {
+          terrainHeights[i] = lerp(terrainHeights[i], point.y, 0.3);
+        } else if (sculptMode === "smooth") {
+          // simple average of 4 neighbors
+          let avg = terrainHeights[i];
+          let count = 1;
+          if (i % vertsX !== 0) {
+            avg += terrainHeights[i - 1];
+            count++;
+          }
+          if (i % vertsX !== vertsX - 1) {
+            avg += terrainHeights[i + 1];
+            count++;
+          }
+          if (i >= vertsX) {
+            avg += terrainHeights[i - vertsX];
+            count++;
+          }
+          if (i < terrainHeights.length - vertsX) {
+            avg += terrainHeights[i + vertsX];
+            count++;
+          }
+          terrainHeights[i] = avg / count;
         }
+      }
 
-        terrainHeights[i] = height * 920 + 105;
+      // Apply to mesh
+      for (let i = 0; i < terrainHeights.length; i++) {
         positions[i * 3 + 2] = terrainHeights[i];
       }
-
-      const minH = Math.min(...terrainHeights);
-      const maxH = Math.max(...terrainHeights);
-      console.log(
-        "✅ FINAL ROLLING HILLS LOADED - smooth natural terrain with strong N/S variation",
-      );
-      console.log(`Height range: ${minH.toFixed(1)} to ${maxH.toFixed(1)}`);
-
-      const groundMat = new THREE.MeshPhongMaterial({
-        color: 0x00bb44,
-        shininess: 5,
-        specular: 0x222222,
-      });
-
-      const ground = new THREE.Mesh(groundGeo, groundMat);
-      ground.rotation.x = -Math.PI / 2;
-      scene.add(ground);
-
-      // Black wireframe (high contrast so you can see every bump)
-      const wireMat = new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.75,
-      });
-      const wireMesh = new THREE.Mesh(groundGeo, wireMat);
-      wireMesh.rotation.x = -Math.PI / 2;
-      scene.add(wireMesh);
-
       groundGeo.attributes.position.needsUpdate = true;
       groundGeo.computeVertexNormals();
-      groundGeo.computeBoundingBox();
-      groundGeo.computeBoundingSphere();
 
-      function getTerrainHeight(worldX, worldZ) {
-        // Normal terrain raycast
-        terrainRaycaster.set(
-          new THREE.Vector3(worldX, 20000, worldZ),
-          new THREE.Vector3(0, -1, 0),
+      // Live tree snapping
+      trees.forEach((t) => {
+        const ty = getTerrainHeight(t.group.position.x, t.group.position.z);
+        t.group.position.y = ty;
+      });
+    }
+
+    scene.fog = new THREE.Fog(0x113311, 800, 95000);
+    // ==================== END HEIGHTMAP ====================
+
+    const playerBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(8, 8, 30, 16),
+      new THREE.MeshPhongMaterial({ color: 0x00ffff }),
+    );
+    playerBody.position.y = 15;
+    scene.add(playerBody);
+    const playerHead = new THREE.Mesh(
+      new THREE.SphereGeometry(8, 16, 16),
+      new THREE.MeshPhongMaterial({ color: 0x00aaff }),
+    );
+    scene.add(playerHead);
+    const frontMarker = new THREE.Mesh(
+      new THREE.ConeGeometry(5, 18, 8),
+      new THREE.MeshPhongMaterial({ color: 0xff0000 }),
+    );
+    frontMarker.rotation.x = Math.PI / 2;
+    frontMarker.position.set(0, 8, -18);
+    playerBody.add(frontMarker);
+
+    let gameActive = false;
+    let currentCharacter = null;
+    let currentAccount = "";
+    const STORAGE_PREFIX = "miniAzeroth_";
+
+    const raceColors = {
+      Human: 0xffddaa,
+      Orc: 0x77ff77,
+      Forsaken: 0x99bbff,
+      "Night Elf": 0x88ffdd,
+    };
+    const genderHeadColors = { Male: 0x4488ff, Female: 0xff88cc };
+    const raceSpawns = {
+      Human: { x: 80, z: 120 },
+      Orc: { x: -180, z: -60 },
+      Forsaken: { x: 220, z: -180 },
+      "Night Elf": { x: -120, z: 200 },
+    };
+
+    let socket = null;
+    let otherPlayers = {};
+    let localNameTag = null;
+    let lastUpdateTime = 0;
+    let lastMovementTime = Date.now();
+    let isHoveringChat = false; // NEW: prevents camera zoom when mouse is over chat
+    // ==================== LEVEL EDITOR ====================
+    let editorMode = false;
+    let trees = []; // {id, group}
+    let selectedId = null;
+    // ==================== TERRAIN SCULPTING (Phase 2) ====================
+    let sculptMode = "null"; // raise, lower, flatten, smooth
+    let brushSize = 25;
+    let brushStrength = 2.5;
+    const undoStack = []; // last 10 terrain states
+    const MAX_UNDO = 10;
+    let isSculpting = false;
+    // ==================== WATER BODIES (Phase 3 - Polygon drawing) ====================
+    let waterMode = false;
+    let currentWaterPoints = []; // temporary points while drawing
+    let waterPreviewLine = null;
+    let waters = []; // {id, mesh, level}
+    let selectedWaterId = null;
+
+    function isTerrainSculptMode() {
+      return sculptMode === "raise" ||
+        sculptMode === "lower" ||
+        sculptMode === "flatten" ||
+        sculptMode === "smooth";
+    }
+
+    function selectWater(waterId) {
+      selectedWaterId = waterId;
+      selectedId = null;
+      deselect();
+
+      const water = waters.find((w) => w.id === waterId);
+      if (!water) return;
+
+      if (water.mesh) {
+        addSelectionBox();
+        selectionBox.setFromObject(water.mesh);
+        selectionBox.visible = true;
+      }
+
+      // Dynamic range: ±300 around current level (centered!)
+      const currentLevel = water.level + 12; // display level (matches what you see)
+      const slider = document.getElementById("waterLevelSlider");
+      slider.min = Math.floor(currentLevel - 300);
+      slider.max = Math.floor(currentLevel + 300);
+      slider.value = Math.floor(currentLevel);
+
+      document.getElementById("waterLevelContainer").style.display = "block";
+      document.getElementById("waterLevelValue").textContent =
+        currentLevel.toFixed(0);
+    }
+
+    function deselectWater() {
+      selectedWaterId = null;
+      if (selectionBox) selectionBox.visible = false;
+      document.getElementById("waterLevelContainer").style.display = "none";
+    }
+
+    function saveUndoState() {
+      undoStack.push(new Float32Array(terrainHeights));
+      if (undoStack.length > MAX_UNDO) undoStack.shift();
+    }
+    let selectionBox = null;
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    const terrainRaycaster = new THREE.Raycaster(); // ← NEW for perfect ground collision
+
+    function createTreeObject(id, x, z) {
+      const group = new THREE.Group();
+      group.userData.id = id;
+
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(6, 8, 30, 8),
+        new THREE.MeshPhongMaterial({ color: 0x8b4513 }),
+      );
+      trunk.position.y = 15;
+      group.add(trunk);
+
+      const foliage = new THREE.Mesh(
+        new THREE.ConeGeometry(25, 50, 8),
+        new THREE.MeshPhongMaterial({ color: 0x00ff88 }),
+      );
+      foliage.position.y = 48;
+      group.add(foliage);
+
+      group.position.set(x, 0, z);
+      const terrainY = getTerrainHeight(x, z);
+      group.position.y = terrainY;
+
+      scene.add(group);
+      trees.push({ id, group });
+      return group;
+    }
+
+    function addSelectionBox() {
+      if (!selectionBox) {
+        selectionBox = new THREE.BoxHelper(undefined, 0xffff00);
+        selectionBox.material.linewidth = 4;
+        scene.add(selectionBox);
+      }
+    }
+
+    function selectTree(treeId) {
+      selectedId = treeId;
+      const tree = trees.find((t) => t.id === treeId);
+      if (tree && tree.group) {
+        addSelectionBox();
+        selectionBox.setFromObject(tree.group);
+        selectionBox.visible = true; // ← THIS WAS THE MISSING LINE
+      }
+    }
+
+    function deselect() {
+      selectedId = null;
+      if (selectionBox) selectionBox.visible = false;
+    }
+
+    // Create trees from world data
+    function loadWorldTrees(data) {
+      // Clear old trees
+      trees.forEach((t) => scene.remove(t.group));
+      trees = [];
+
+      data.trees.forEach((tree) => {
+        createTreeObject(tree.id, tree.x, tree.z);
+      });
+    }
+    function loadWorldWater(data) {
+      // Clear old water
+      waters.forEach((w) => scene.remove(w.mesh));
+      waters = [];
+
+      data.waterBodies.forEach((water) => {
+        createWaterMesh(water.id, water.points, water.level);
+      });
+    }
+
+    function createWaterMesh(id, points, level) {
+      if (points.length < 3) return;
+
+      console.log(`💧 Creating water ${id} at level ${level.toFixed(1)}`);
+
+      // === CENTER THE POLYGON (fixes the "invisible" bug) ===
+      let sumX = 0,
+        sumZ = 0;
+      points.forEach((p) => {
+        sumX += p.x;
+        sumZ += p.z;
+      });
+      const centerX = sumX / points.length;
+      const centerZ = sumZ / points.length;
+
+      const shape = new THREE.Shape();
+      shape.moveTo(points[0].x - centerX, points[0].z - centerZ);
+      for (let i = 1; i < points.length; i++) {
+        shape.lineTo(points[i].x - centerX, points[i].z - centerZ);
+      }
+      shape.closePath();
+
+      const geometry = new THREE.ShapeGeometry(shape);
+      const material = new THREE.MeshPhongMaterial({
+        color: 0x00ccff, // bright cyan
+        transparent: true,
+        opacity: 0.92,
+        shininess: 50,
+        side: THREE.DoubleSide,
+      });
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(centerX, level - 12, centerZ); // lowered 12 units so it sinks nicely into depressions
+
+      // Gentle ripple animation data
+      mesh.userData = {
+        id,
+        originalVertices: geometry.attributes.position.array.slice(),
+        timeOffset: Math.random() * 10,
+      };
+
+      scene.add(mesh);
+      waters.push({ id, mesh, level: level - 12 });
+      console.log(
+        `✅ Water mesh ${id} added at ${centerX.toFixed(0)}, ${level - 12}`,
+      );
+      return mesh;
+    }
+    function updateWaterPreview() {
+      if (waterPreviewLine) {
+        scene.remove(waterPreviewLine);
+        waterPreviewLine = null;
+      }
+      if (currentWaterPoints.length < 2) return;
+
+      // Preview now floats slightly above the actual hills
+      const points3d = currentWaterPoints.map((p) => {
+        const y = getTerrainHeight(p.x, p.z) + 4;
+        return new THREE.Vector3(p.x, y, p.z);
+      });
+
+      const geometry = new THREE.BufferGeometry().setFromPoints(points3d);
+      const material = new THREE.LineBasicMaterial({
+        color: 0x00ffff,
+        linewidth: 8,
+      });
+      waterPreviewLine = new THREE.Line(geometry, material);
+      scene.add(waterPreviewLine);
+    }
+
+    function isPointInPolygon(x, z, points) {
+      let inside = false;
+      for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const xi = points[i].x,
+          zi = points[i].z;
+        const xj = points[j].x,
+          zj = points[j].z;
+        const intersect =
+          zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi;
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+    // ==================== END LEVEL EDITOR ====================
+    const UPDATE_RATE = 45;
+    const AFK_TIMEOUT = 45000;
+    const FADE_START = 80;
+    const HIDE_DISTANCE = 250;
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function getCardinalDirection(rotY) {
+      let angle = ((((rotY * 180) / Math.PI) % 360) + 360) % 360;
+      if (angle < 45 || angle >= 315) return "North";
+      if (angle < 135) return "West";
+      if (angle < 225) return "South";
+      return "East";
+    }
+
+    function createNameTag(name, level, isLocal = false) {
+      const label = document.createElement("div");
+      label.style.position = "absolute";
+      label.style.background = "rgba(0,0,0,0.85)";
+      label.style.border = "2px solid #0f0";
+      label.style.color = "#00ff88";
+      label.style.fontSize = "14px";
+      label.style.padding = "4px 8px";
+      label.style.borderRadius = "4px";
+      label.style.whiteSpace = "nowrap";
+      label.style.pointerEvents = isLocal ? "auto" : "none";
+      label.style.cursor = isLocal ? "pointer" : "default";
+      label.style.transition = "opacity 0.3s";
+      label.innerHTML = `<div>${name} <small>Lv${level}</small></div><div style="height:6px;background:#222;width:90px;margin:3px auto 0;border:1px solid #0f0;"><div class="healthBar" style="height:100%;width:100%;background:#0f0;"></div></div>`;
+      if (isLocal) label.onclick = () => showNameCustomPanel();
+      document.getElementById("nameTagsContainer").appendChild(label);
+      return label;
+    }
+
+    function showNameCustomPanel() {
+      document.getElementById("nameCustomPanel").style.display = "block";
+      document.getElementById("nameColorPicker").value =
+        currentCharacter.nameColor || "#00ff88";
+    }
+
+    function saveNameColor() {
+      const newColor = document.getElementById("nameColorPicker").value;
+      currentCharacter.nameColor = newColor;
+      saveCharacter();
+      if (localNameTag) localNameTag.style.color = newColor;
+      if (socket) socket.emit("updateNameColor", newColor);
+      hideNameCustomPanel();
+    }
+
+    function hideNameCustomPanel() {
+      document.getElementById("nameCustomPanel").style.display = "none";
+    }
+
+    function updateNameTags() {
+      const now = Date.now();
+      const isAFK = now - lastMovementTime > AFK_TIMEOUT;
+
+      Object.values(otherPlayers).forEach((p) => {
+        if (!p.body || !p.label) return;
+        const dist = playerBody.position.distanceTo(p.body.position);
+        if (dist > HIDE_DISTANCE) {
+          p.label.style.display = "none";
+          return;
+        }
+        p.label.style.display = "block";
+
+        const vec = p.body.position.clone();
+        vec.y += 48;
+        vec.project(camera);
+        const x = (vec.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-vec.y * 0.5 + 0.5) * window.innerHeight;
+
+        p.label.style.left = `${x - p.label.offsetWidth / 2}px`;
+        p.label.style.top = `${y - 10}px`;
+
+        const opacity = Math.max(
+          0.25,
+          1 - (dist - FADE_START) / (HIDE_DISTANCE - FADE_START),
         );
-        const intersects = terrainRaycaster.intersectObject(ground);
-        if (intersects.length > 0) {
-          return intersects[0].point.y;
-        }
-        return 105;
+        p.label.style.opacity = opacity;
+
+        const afkText = p.isAFK
+          ? ' <span style="color:#ff0">(AFK)</span>'
+          : "";
+        p.label.querySelector("div").innerHTML =
+          `${p.name} <small>Lv${p.level}</small>${afkText}`;
+        p.label.style.color = p.nameColor || "#00ff88";
+      });
+
+      if (localNameTag) {
+        const vec = playerBody.position.clone();
+        vec.y += 48;
+        vec.project(camera);
+        const x = (vec.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-vec.y * 0.5 + 0.5) * window.innerHeight;
+
+        localNameTag.style.left = `${x - localNameTag.offsetWidth / 2}px`;
+        localNameTag.style.top = `${y - 10}px`;
+        localNameTag.style.display = "block";
+        localNameTag.style.opacity = 1;
+
+        const afkText = isAFK ? ' <span style="color:#ff0">(AFK)</span>' : "";
+        localNameTag.querySelector("div").innerHTML =
+          `${currentCharacter.name} <small>Lv${currentCharacter.level}</small>${afkText}`;
+        localNameTag.style.color = currentCharacter.nameColor || "#00ff88";
       }
-      function sculptAtMouse(e) {
-        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    }
 
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObject(ground);
-        if (intersects.length === 0) return;
+    function updateCoordsDisplay() {
+      if (!gameActive || !playerBody) return;
+      document.getElementById("posX").textContent =
+        playerBody.position.x.toFixed(1);
+      document.getElementById("posY").textContent =
+        playerBody.position.y.toFixed(1);
+      document.getElementById("posZ").textContent =
+        playerBody.position.z.toFixed(1);
+      document.getElementById("facing").textContent = getCardinalDirection(
+        playerBody.rotation.y,
+      );
+    }
 
-        const point = intersects[0].point;
-        const positions = groundGeo.attributes.position.array;
-        const vertsX = SEG_X + 1;
-
-        for (let i = 0; i < terrainHeights.length; i++) {
-          const ix = i % vertsX;
-          const iz = Math.floor(i / vertsX);
-          const worldX = (ix - SEG_X / 2) * (WIDTH / SEG_X);
-          const worldZ = (iz - SEG_Z / 2) * (DEPTH / SEG_Z);
-
-          const dist = Math.sqrt(
-            Math.pow(worldX - point.x, 2) + Math.pow(worldZ - point.z, 2),
-          );
-          if (dist > brushSize * 60) continue; // scaled to world units
-
-          const falloff = Math.max(0, 1 - dist / (brushSize * 60));
-          let change = brushStrength * falloff * 4;
-
-          if (sculptMode === "raise") {
-            terrainHeights[i] += change;
-          } else if (sculptMode === "lower") {
-            terrainHeights[i] -= change;
-          } else if (sculptMode === "flatten") {
-            terrainHeights[i] = lerp(terrainHeights[i], point.y, 0.3);
-          } else if (sculptMode === "smooth") {
-            // simple average of 4 neighbors
-            let avg = terrainHeights[i];
-            let count = 1;
-            if (i % vertsX !== 0) {
-              avg += terrainHeights[i - 1];
-              count++;
-            }
-            if (i % vertsX !== vertsX - 1) {
-              avg += terrainHeights[i + 1];
-              count++;
-            }
-            if (i >= vertsX) {
-              avg += terrainHeights[i - vertsX];
-              count++;
-            }
-            if (i < terrainHeights.length - vertsX) {
-              avg += terrainHeights[i + vertsX];
-              count++;
-            }
-            terrainHeights[i] = avg / count;
-          }
-        }
-
-        // Apply to mesh
-        for (let i = 0; i < terrainHeights.length; i++) {
-          positions[i * 3 + 2] = terrainHeights[i];
-        }
-        groundGeo.attributes.position.needsUpdate = true;
-        groundGeo.computeVertexNormals();
-
-        // Live tree snapping
-        trees.forEach((t) => {
-          const ty = getTerrainHeight(t.group.position.x, t.group.position.z);
-          t.group.position.y = ty;
-        });
-      }
-
-      scene.fog = new THREE.Fog(0x113311, 800, 95000);
-      // ==================== END HEIGHTMAP ====================
-
-      const playerBody = new THREE.Mesh(
+    function createOtherPlayerModel(data) {
+      if (otherPlayers[data.id]) return;
+      const body = new THREE.Mesh(
         new THREE.CylinderGeometry(8, 8, 30, 16),
-        new THREE.MeshPhongMaterial({ color: 0x00ffff }),
+        new THREE.MeshPhongMaterial({
+          color: raceColors[data.race] || 0x00ffff,
+          shininess: 12,
+        }),
       );
-      playerBody.position.y = 15;
-      scene.add(playerBody);
-      const playerHead = new THREE.Mesh(
+      body.position.set(data.x || 0, data.y || 15, data.z || 0);
+      body.rotation.y = data.rot || 0;
+      scene.add(body);
+      const head = new THREE.Mesh(
         new THREE.SphereGeometry(8, 16, 16),
-        new THREE.MeshPhongMaterial({ color: 0x00aaff }),
+        new THREE.MeshPhongMaterial({
+          color: genderHeadColors[data.gender] || 0x00aaff,
+          shininess: 12,
+        }),
       );
-      scene.add(playerHead);
-      const frontMarker = new THREE.Mesh(
-        new THREE.ConeGeometry(5, 18, 8),
-        new THREE.MeshPhongMaterial({ color: 0xff0000 }),
+      head.position.set(data.x || 0, (data.y || 15) + 23, data.z || 0);
+      scene.add(head);
+
+      const label = createNameTag(data.name, data.level, false);
+      otherPlayers[data.id] = {
+        body,
+        head,
+        label,
+        targetX: data.x || 0,
+        targetY: data.y || 15,
+        targetZ: data.z || 0,
+        targetRot: data.rot || 0,
+        nameColor: data.nameColor || "#00ff88",
+        isAFK: data.isAFK || false,
+        name: data.name,
+        level: data.level,
+      };
+    }
+
+    function removeOtherPlayer(id) {
+      const p = otherPlayers[id];
+      if (p) {
+        scene.remove(p.body);
+        scene.remove(p.head);
+        if (p.label && p.label.parentNode)
+          p.label.parentNode.removeChild(p.label);
+        delete otherPlayers[id];
+      }
+    }
+
+    function initSocket() {
+      if (socket) socket.disconnect();
+      socket = io();
+      socket.on("connect", () => {
+        socket.emit("joinGame", {
+          name: currentCharacter.name,
+          race: currentCharacter.race,
+          gender: currentCharacter.gender,
+          level: currentCharacter.level,
+          x: playerBody.position.x,
+          y: playerBody.position.y,
+          z: playerBody.position.z,
+          rot: playerBody.rotation.y,
+          nameColor: currentCharacter.nameColor || "#00ff88",
+        });
+      });
+      socket.on("existingPlayers", (list) =>
+        list.forEach((data) => createOtherPlayerModel(data)),
       );
-      frontMarker.rotation.x = Math.PI / 2;
-      frontMarker.position.set(0, 8, -18);
-      playerBody.add(frontMarker);
-
-      let gameActive = false;
-      let currentCharacter = null;
-      let currentAccount = "";
-      const STORAGE_PREFIX = "miniAzeroth_";
-
-      const raceColors = {
-        Human: 0xffddaa,
-        Orc: 0x77ff77,
-        Forsaken: 0x99bbff,
-        "Night Elf": 0x88ffdd,
-      };
-      const genderHeadColors = { Male: 0x4488ff, Female: 0xff88cc };
-      const raceSpawns = {
-        Human: { x: 80, z: 120 },
-        Orc: { x: -180, z: -60 },
-        Forsaken: { x: 220, z: -180 },
-        "Night Elf": { x: -120, z: 200 },
-      };
-
-      let socket = null;
-      let otherPlayers = {};
-      let localNameTag = null;
-      let lastUpdateTime = 0;
-      let lastMovementTime = Date.now();
-      let isHoveringChat = false; // NEW: prevents camera zoom when mouse is over chat
-      // ==================== LEVEL EDITOR ====================
-      let editorMode = false;
-      let trees = []; // {id, group}
-      let selectedId = null;
-      // ==================== TERRAIN SCULPTING (Phase 2) ====================
-      let sculptMode = "raise"; // raise, lower, flatten, smooth
-      let brushSize = 25;
-      let brushStrength = 2.5;
-      const undoStack = []; // last 10 terrain states
-      const MAX_UNDO = 10;
-      let isSculpting = false;
-      // ==================== WATER BODIES (Phase 3 - Polygon drawing) ====================
-      let waterMode = false;
-      let currentWaterPoints = []; // temporary points while drawing
-      let waterPreviewLine = null;
-      let waters = []; // {id, mesh, level}
-      let selectedWaterId = null;
-      function selectWater(waterId) {
-        selectedWaterId = waterId;
-        selectedId = null;
-        deselect();
-
-        const water = waters.find((w) => w.id === waterId);
-        if (!water) return;
-
-        if (water.mesh) {
-          addSelectionBox();
-          selectionBox.setFromObject(water.mesh);
-          selectionBox.visible = true;
-        }
-
-        // Dynamic range: ±300 around current level (centered!)
-        const currentLevel = water.level + 12; // display level (matches what you see)
-        const slider = document.getElementById("waterLevelSlider");
-        slider.min = Math.floor(currentLevel - 300);
-        slider.max = Math.floor(currentLevel + 300);
-        slider.value = Math.floor(currentLevel);
-
-        document.getElementById("waterLevelContainer").style.display = "block";
-        document.getElementById("waterLevelValue").textContent =
-          currentLevel.toFixed(0);
-      }
-
-      function deselectWater() {
-        selectedWaterId = null;
-        if (selectionBox) selectionBox.visible = false;
-        document.getElementById("waterLevelContainer").style.display = "none";
-      }
-
-      function saveUndoState() {
-        undoStack.push(new Float32Array(terrainHeights));
-        if (undoStack.length > MAX_UNDO) undoStack.shift();
-      }
-      let selectionBox = null;
-      const raycaster = new THREE.Raycaster();
-      const mouse = new THREE.Vector2();
-      const terrainRaycaster = new THREE.Raycaster(); // ← NEW for perfect ground collision
-
-      function createTreeObject(id, x, z) {
-        const group = new THREE.Group();
-        group.userData.id = id;
-
-        const trunk = new THREE.Mesh(
-          new THREE.CylinderGeometry(6, 8, 30, 8),
-          new THREE.MeshPhongMaterial({ color: 0x8b4513 }),
-        );
-        trunk.position.y = 15;
-        group.add(trunk);
-
-        const foliage = new THREE.Mesh(
-          new THREE.ConeGeometry(25, 50, 8),
-          new THREE.MeshPhongMaterial({ color: 0x00ff88 }),
-        );
-        foliage.position.y = 48;
-        group.add(foliage);
-
-        group.position.set(x, 0, z);
-        const terrainY = getTerrainHeight(x, z);
-        group.position.y = terrainY;
-
-        scene.add(group);
-        trees.push({ id, group });
-        return group;
-      }
-
-      function addSelectionBox() {
-        if (!selectionBox) {
-          selectionBox = new THREE.BoxHelper(undefined, 0xffff00);
-          selectionBox.material.linewidth = 4;
-          scene.add(selectionBox);
-        }
-      }
-
-      function selectTree(treeId) {
-        selectedId = treeId;
-        const tree = trees.find((t) => t.id === treeId);
-        if (tree && tree.group) {
-          addSelectionBox();
-          selectionBox.setFromObject(tree.group);
-          selectionBox.visible = true; // ← THIS WAS THE MISSING LINE
-        }
-      }
-
-      function deselect() {
-        selectedId = null;
-        if (selectionBox) selectionBox.visible = false;
-      }
-
-      // Create trees from world data
-      function loadWorldTrees(data) {
-        // Clear old trees
-        trees.forEach((t) => scene.remove(t.group));
-        trees = [];
-
-        data.trees.forEach((tree) => {
-          createTreeObject(tree.id, tree.x, tree.z);
-        });
-      }
-      function loadWorldWater(data) {
-        // Clear old water
-        waters.forEach((w) => scene.remove(w.mesh));
-        waters = [];
-
-        data.waterBodies.forEach((water) => {
-          createWaterMesh(water.id, water.points, water.level);
-        });
-      }
-
-      function createWaterMesh(id, points, level) {
-        if (points.length < 3) return;
-
-        console.log(`💧 Creating water ${id} at level ${level.toFixed(1)}`);
-
-        // === CENTER THE POLYGON (fixes the "invisible" bug) ===
-        let sumX = 0,
-          sumZ = 0;
-        points.forEach((p) => {
-          sumX += p.x;
-          sumZ += p.z;
-        });
-        const centerX = sumX / points.length;
-        const centerZ = sumZ / points.length;
-
-        const shape = new THREE.Shape();
-        shape.moveTo(points[0].x - centerX, points[0].z - centerZ);
-        for (let i = 1; i < points.length; i++) {
-          shape.lineTo(points[i].x - centerX, points[i].z - centerZ);
-        }
-        shape.closePath();
-
-        const geometry = new THREE.ShapeGeometry(shape);
-        const material = new THREE.MeshPhongMaterial({
-          color: 0x00ccff, // bright cyan
-          transparent: true,
-          opacity: 0.92,
-          shininess: 50,
-          side: THREE.DoubleSide,
-        });
-
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.position.set(centerX, level - 12, centerZ); // lowered 12 units so it sinks nicely into depressions
-
-        // Gentle ripple animation data
-        mesh.userData = {
-          id,
-          originalVertices: geometry.attributes.position.array.slice(),
-          timeOffset: Math.random() * 10,
-        };
-
-        scene.add(mesh);
-        waters.push({ id, mesh, level: level - 12 });
-        console.log(
-          `✅ Water mesh ${id} added at ${centerX.toFixed(0)}, ${level - 12}`,
-        );
-        return mesh;
-      }
-      function updateWaterPreview() {
-        if (waterPreviewLine) {
-          scene.remove(waterPreviewLine);
-          waterPreviewLine = null;
-        }
-        if (currentWaterPoints.length < 2) return;
-
-        // Preview now floats slightly above the actual hills
-        const points3d = currentWaterPoints.map((p) => {
-          const y = getTerrainHeight(p.x, p.z) + 4;
-          return new THREE.Vector3(p.x, y, p.z);
-        });
-
-        const geometry = new THREE.BufferGeometry().setFromPoints(points3d);
-        const material = new THREE.LineBasicMaterial({
-          color: 0x00ffff,
-          linewidth: 8,
-        });
-        waterPreviewLine = new THREE.Line(geometry, material);
-        scene.add(waterPreviewLine);
-      }
-
-      function isPointInPolygon(x, z, points) {
-        let inside = false;
-        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-          const xi = points[i].x,
-            zi = points[i].z;
-          const xj = points[j].x,
-            zj = points[j].z;
-          const intersect =
-            zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi;
-          if (intersect) inside = !inside;
-        }
-        return inside;
-      }
-      // ==================== END LEVEL EDITOR ====================
-      const UPDATE_RATE = 45;
-      const AFK_TIMEOUT = 45000;
-      const FADE_START = 80;
-      const HIDE_DISTANCE = 250;
-
-      function lerp(a, b, t) {
-        return a + (b - a) * t;
-      }
-
-      function getCardinalDirection(rotY) {
-        let angle = ((((rotY * 180) / Math.PI) % 360) + 360) % 360;
-        if (angle < 45 || angle >= 315) return "North";
-        if (angle < 135) return "West";
-        if (angle < 225) return "South";
-        return "East";
-      }
-
-      function createNameTag(name, level, isLocal = false) {
-        const label = document.createElement("div");
-        label.style.position = "absolute";
-        label.style.background = "rgba(0,0,0,0.85)";
-        label.style.border = "2px solid #0f0";
-        label.style.color = "#00ff88";
-        label.style.fontSize = "14px";
-        label.style.padding = "4px 8px";
-        label.style.borderRadius = "4px";
-        label.style.whiteSpace = "nowrap";
-        label.style.pointerEvents = isLocal ? "auto" : "none";
-        label.style.cursor = isLocal ? "pointer" : "default";
-        label.style.transition = "opacity 0.3s";
-        label.innerHTML = `<div>${name} <small>Lv${level}</small></div><div style="height:6px;background:#222;width:90px;margin:3px auto 0;border:1px solid #0f0;"><div class="healthBar" style="height:100%;width:100%;background:#0f0;"></div></div>`;
-        if (isLocal) label.onclick = () => showNameCustomPanel();
-        document.getElementById("nameTagsContainer").appendChild(label);
-        return label;
-      }
-
-      function showNameCustomPanel() {
-        document.getElementById("nameCustomPanel").style.display = "block";
-        document.getElementById("nameColorPicker").value =
-          currentCharacter.nameColor || "#00ff88";
-      }
-
-      function saveNameColor() {
-        const newColor = document.getElementById("nameColorPicker").value;
-        currentCharacter.nameColor = newColor;
-        saveCharacter();
-        if (localNameTag) localNameTag.style.color = newColor;
-        if (socket) socket.emit("updateNameColor", newColor);
-        hideNameCustomPanel();
-      }
-
-      function hideNameCustomPanel() {
-        document.getElementById("nameCustomPanel").style.display = "none";
-      }
-
-      function updateNameTags() {
-        const now = Date.now();
-        const isAFK = now - lastMovementTime > AFK_TIMEOUT;
-
-        Object.values(otherPlayers).forEach((p) => {
-          if (!p.body || !p.label) return;
-          const dist = playerBody.position.distanceTo(p.body.position);
-          if (dist > HIDE_DISTANCE) {
-            p.label.style.display = "none";
-            return;
-          }
-          p.label.style.display = "block";
-
-          const vec = p.body.position.clone();
-          vec.y += 48;
-          vec.project(camera);
-          const x = (vec.x * 0.5 + 0.5) * window.innerWidth;
-          const y = (-vec.y * 0.5 + 0.5) * window.innerHeight;
-
-          p.label.style.left = `${x - p.label.offsetWidth / 2}px`;
-          p.label.style.top = `${y - 10}px`;
-
-          const opacity = Math.max(
-            0.25,
-            1 - (dist - FADE_START) / (HIDE_DISTANCE - FADE_START),
-          );
-          p.label.style.opacity = opacity;
-
-          const afkText = p.isAFK
-            ? ' <span style="color:#ff0">(AFK)</span>'
-            : "";
-          p.label.querySelector("div").innerHTML =
-            `${p.name} <small>Lv${p.level}</small>${afkText}`;
-          p.label.style.color = p.nameColor || "#00ff88";
-        });
-
-        if (localNameTag) {
-          const vec = playerBody.position.clone();
-          vec.y += 48;
-          vec.project(camera);
-          const x = (vec.x * 0.5 + 0.5) * window.innerWidth;
-          const y = (-vec.y * 0.5 + 0.5) * window.innerHeight;
-
-          localNameTag.style.left = `${x - localNameTag.offsetWidth / 2}px`;
-          localNameTag.style.top = `${y - 10}px`;
-          localNameTag.style.display = "block";
-          localNameTag.style.opacity = 1;
-
-          const afkText = isAFK ? ' <span style="color:#ff0">(AFK)</span>' : "";
-          localNameTag.querySelector("div").innerHTML =
-            `${currentCharacter.name} <small>Lv${currentCharacter.level}</small>${afkText}`;
-          localNameTag.style.color = currentCharacter.nameColor || "#00ff88";
-        }
-      }
-
-      function updateCoordsDisplay() {
-        if (!gameActive || !playerBody) return;
-        document.getElementById("posX").textContent =
-          playerBody.position.x.toFixed(1);
-        document.getElementById("posY").textContent =
-          playerBody.position.y.toFixed(1);
-        document.getElementById("posZ").textContent =
-          playerBody.position.z.toFixed(1);
-        document.getElementById("facing").textContent = getCardinalDirection(
-          playerBody.rotation.y,
-        );
-      }
-
-      function createOtherPlayerModel(data) {
-        if (otherPlayers[data.id]) return;
-        const body = new THREE.Mesh(
-          new THREE.CylinderGeometry(8, 8, 30, 16),
-          new THREE.MeshPhongMaterial({
-            color: raceColors[data.race] || 0x00ffff,
-            shininess: 12,
-          }),
-        );
-        body.position.set(data.x || 0, data.y || 15, data.z || 0);
-        body.rotation.y = data.rot || 0;
-        scene.add(body);
-        const head = new THREE.Mesh(
-          new THREE.SphereGeometry(8, 16, 16),
-          new THREE.MeshPhongMaterial({
-            color: genderHeadColors[data.gender] || 0x00aaff,
-            shininess: 12,
-          }),
-        );
-        head.position.set(data.x || 0, (data.y || 15) + 23, data.z || 0);
-        scene.add(head);
-
-        const label = createNameTag(data.name, data.level, false);
-        otherPlayers[data.id] = {
-          body,
-          head,
-          label,
-          targetX: data.x || 0,
-          targetY: data.y || 15,
-          targetZ: data.z || 0,
-          targetRot: data.rot || 0,
-          nameColor: data.nameColor || "#00ff88",
-          isAFK: data.isAFK || false,
-          name: data.name,
-          level: data.level,
-        };
-      }
-
-      function removeOtherPlayer(id) {
-        const p = otherPlayers[id];
+      socket.on("newPlayer", (data) => createOtherPlayerModel(data));
+      socket.on("playerMoved", (data) => {
+        const p = otherPlayers[data.id];
         if (p) {
-          scene.remove(p.body);
-          scene.remove(p.head);
-          if (p.label && p.label.parentNode)
-            p.label.parentNode.removeChild(p.label);
-          delete otherPlayers[id];
+          p.targetX = data.x;
+          p.targetY = data.y;
+          p.targetZ = data.z;
+          p.targetRot = data.rot;
+          if (data.isAFK !== undefined) p.isAFK = data.isAFK;
         }
-      }
+      });
+      socket.on("nameColorUpdated", (data) => {
+        const p = otherPlayers[data.id];
+        if (p) p.nameColor = data.nameColor;
+      });
+      socket.on("playerLeft", (id) => removeOtherPlayer(id));
+      socket.on("chatMessage", (data) => {
+        if (data.name !== currentCharacter.name)
+          addChatMessage(data.name, data.message);
+      });
 
-      function initSocket() {
-        if (socket) socket.disconnect();
-        socket = io();
-        socket.on("connect", () => {
-          socket.emit("joinGame", {
-            name: currentCharacter.name,
-            race: currentCharacter.race,
-            gender: currentCharacter.gender,
-            level: currentCharacter.level,
-            x: playerBody.position.x,
-            y: playerBody.position.y,
-            z: playerBody.position.z,
-            rot: playerBody.rotation.y,
-            nameColor: currentCharacter.nameColor || "#00ff88",
-          });
-        });
-        socket.on("existingPlayers", (list) =>
-          list.forEach((data) => createOtherPlayerModel(data)),
-        );
-        socket.on("newPlayer", (data) => createOtherPlayerModel(data));
-        socket.on("playerMoved", (data) => {
-          const p = otherPlayers[data.id];
-          if (p) {
-            p.targetX = data.x;
-            p.targetY = data.y;
-            p.targetZ = data.z;
-            p.targetRot = data.rot;
-            if (data.isAFK !== undefined) p.isAFK = data.isAFK;
-          }
-        });
-        socket.on("nameColorUpdated", (data) => {
-          const p = otherPlayers[data.id];
-          if (p) p.nameColor = data.nameColor;
-        });
-        socket.on("playerLeft", (id) => removeOtherPlayer(id));
-        socket.on("chatMessage", (data) => {
-          if (data.name !== currentCharacter.name)
-            addChatMessage(data.name, data.message);
-        });
+      // Tree listeners
+      socket.on("treeAdded", (tree) => {
+        createTreeObject(tree.id, tree.x, tree.z);
+      });
+      socket.on("treeRemoved", (id) => {
+        const index = trees.findIndex((t) => t.id === id);
+        if (index !== -1) {
+          scene.remove(trees[index].group);
+          trees.splice(index, 1);
+        }
+        if (selectedId === id) deselect();
+      });
 
-        // Tree listeners
-        socket.on("treeAdded", (tree) => {
-          createTreeObject(tree.id, tree.x, tree.z);
-        });
-        socket.on("treeRemoved", (id) => {
-          const index = trees.findIndex((t) => t.id === id);
-          if (index !== -1) {
-            scene.remove(trees[index].group);
-            trees.splice(index, 1);
-          }
-          if (selectedId === id) deselect();
-        });
+      // === WORLD SYNC - Trees + Saved Terrain + Water Bodies (now persistent!) ===
+      socket.on("worldData", (zoneData) => {
+        console.log("🌍 Received world data from server");
+        if (zoneData.trees) loadWorldTrees(zoneData);
 
-        // === WORLD SYNC - Trees + Saved Terrain + Water Bodies (now persistent!) ===
-        socket.on("worldData", (zoneData) => {
-          console.log("🌍 Received world data from server");
-          if (zoneData.trees) loadWorldTrees(zoneData);
+        // NEW: Load saved terrain from world.json so sculpting survives refresh!
+        if (
+          zoneData.terrain &&
+          zoneData.terrain.length === terrainHeights.length
+        ) {
+          terrainHeights.set(zoneData.terrain);
 
-          // NEW: Load saved terrain from world.json so sculpting survives refresh!
-          if (
-            zoneData.terrain &&
-            zoneData.terrain.length === terrainHeights.length
-          ) {
-            terrainHeights.set(zoneData.terrain);
-
-            const positions = groundGeo.attributes.position.array;
-            for (let i = 0; i < terrainHeights.length; i++) {
-              positions[i * 3 + 2] = terrainHeights[i];
-            }
-            groundGeo.attributes.position.needsUpdate = true;
-            groundGeo.computeVertexNormals();
-
-            console.log("✅ Loaded saved terrain from world.json");
-
-            // Snap trees & player to the loaded terrain
-            trees.forEach((t) => {
-              if (t.group)
-                t.group.position.y = getTerrainHeight(
-                  t.group.position.x,
-                  t.group.position.z,
-                );
-            });
-            const py = getTerrainHeight(
-              playerBody.position.x,
-              playerBody.position.z,
-            );
-            playerBody.position.y = py + 15;
-            playerHead.position.y = playerBody.position.y + 23;
-          }
-
-          // NEW: Load water bodies from world.json
-          if (zoneData.waterBodies) loadWorldWater(zoneData);
-        });
-        socket.on("terrainUpdated", (newHeights) => {
-          console.log("🌍 Terrain updated by another player");
-          terrainHeights.set(newHeights);
-
-          // Apply to mesh
           const positions = groundGeo.attributes.position.array;
           for (let i = 0; i < terrainHeights.length; i++) {
             positions[i * 3 + 2] = terrainHeights[i];
@@ -1154,209 +1119,257 @@
           groundGeo.attributes.position.needsUpdate = true;
           groundGeo.computeVertexNormals();
 
-          // Snap ALL trees to new terrain
-          trees.forEach((t) => {
-            const ty = getTerrainHeight(t.group.position.x, t.group.position.z);
-            t.group.position.y = ty;
-          });
+          console.log("✅ Loaded saved terrain from world.json");
 
-          // Snap local player too
+          // Snap trees & player to the loaded terrain
+          trees.forEach((t) => {
+            if (t.group)
+              t.group.position.y = getTerrainHeight(
+                t.group.position.x,
+                t.group.position.z,
+              );
+          });
           const py = getTerrainHeight(
             playerBody.position.x,
             playerBody.position.z,
           );
           playerBody.position.y = py + 15;
+          playerHead.position.y = playerBody.position.y + 23;
+        }
+
+        // NEW: Load water bodies from world.json
+        if (zoneData.waterBodies) loadWorldWater(zoneData);
+      });
+      socket.on("terrainUpdated", (newHeights) => {
+        console.log("🌍 Terrain updated by another player");
+        terrainHeights.set(newHeights);
+
+        // Apply to mesh
+        const positions = groundGeo.attributes.position.array;
+        for (let i = 0; i < terrainHeights.length; i++) {
+          positions[i * 3 + 2] = terrainHeights[i];
+        }
+        groundGeo.attributes.position.needsUpdate = true;
+        groundGeo.computeVertexNormals();
+
+        // Snap ALL trees to new terrain
+        trees.forEach((t) => {
+          const ty = getTerrainHeight(t.group.position.x, t.group.position.z);
+          t.group.position.y = ty;
         });
-        socket.on("waterBodyAdded", (water) => {
-          createWaterMesh(water.id, water.points, water.level);
-        });
 
-        socket.on("waterBodyRemoved", (id) => {
-          const index = waters.findIndex((w) => w.id === id);
-          if (index !== -1) {
-            scene.remove(waters[index].mesh);
-            waters.splice(index, 1);
-          }
-          if (selectedWaterId === id) selectedWaterId = null;
-        });
-
-        socket.on("waterLevelUpdated", (data) => {
-          const w = waters.find((w) => w.id === data.id);
-          if (w) {
-            w.mesh.position.y = data.level;
-            w.level = data.level;
-          }
-        });
-      }
-
-      function addChatMessage(name, msg) {
-        const log = document.getElementById("chatMessages");
-        const entry = document.createElement("div");
-        entry.innerHTML = `<b>${name}:</b> ${msg}`;
-        log.appendChild(entry);
-        log.scrollTop = log.scrollHeight;
-
-        if (log.children.length > 100) log.removeChild(log.children[0]);
-      }
-
-      function startGame(name) {
-        document.getElementById("charListScreen").style.display = "none";
-        document.getElementById("hud").style.display = "block";
-        document.getElementById("instructions").style.display = "block";
-        document.getElementById("chatContainer").style.display = "block";
-        document.getElementById("hudName").textContent = name;
-        document.getElementById("hudLevel").textContent =
-          currentCharacter.level;
-
-        localNameTag = createNameTag(name, currentCharacter.level, true);
-        localNameTag.style.color = currentCharacter.nameColor || "#00ff88";
-
-        gameActive = true;
-        document.getElementById("coordsPanel").style.display = "block";
-
-        lastMovementTime = Date.now();
-
-        freeLookYaw = playerBody.rotation.y;
-
-        initSocket();
-        socket.emit("requestWorld");
-
-        // Snap player perfectly to the loaded terrain
-        const surfaceY = getTerrainHeight(
+        // Snap local player too
+        const py = getTerrainHeight(
           playerBody.position.x,
           playerBody.position.z,
         );
-        playerBody.position.y = surfaceY + 15;
-        playerHead.position.copy(playerBody.position);
-        playerHead.position.y += 23;
-
-        console.log(
-          `✅ Player snapped to terrain Y = ${playerBody.position.y.toFixed(1)}`,
-        );
-      }
-
-      function logout() {
-        saveCharacter();
-        if (socket) socket.disconnect();
-        Object.keys(otherPlayers).forEach((id) => removeOtherPlayer(id));
-        otherPlayers = {};
-        if (localNameTag && localNameTag.parentNode)
-          localNameTag.parentNode.removeChild(localNameTag);
-        localNameTag = null;
-        document.getElementById("coordsPanel").style.display = "none";
-        gameActive = false;
-        document.getElementById("hud").style.display = "none";
-        document.getElementById("instructions").style.display = "none";
-        document.getElementById("chatContainer").style.display = "none";
-        document.getElementById("accountScreen").style.display = "flex";
-      }
-
-      // Full camera + movement
-      const keys = {};
-      let isRightMouse = false,
-        isLeftMouse = false;
-      let freeLookYaw = 0,
-        freeLookPitch = 0,
-        cameraPitch = 0;
-      let cameraDistance = 125;
-      const moveSpeed = 1.6,
-        turnSpeed = 0.022;
-      let velocityY = 0,
-        isJumping = false;
-      let horizontalVelocity = new THREE.Vector3();
-
-      function normalizeAngle(a) {
-        a = a % (Math.PI * 2);
-        if (a < -Math.PI) a += Math.PI * 2;
-        if (a > Math.PI) a -= Math.PI * 2;
-        return a;
-      }
-
-      window.addEventListener("keydown", (e) => {
-        if (!gameActive) return;
-
-        // Enter to focus chat
-        if (
-          e.key === "Enter" &&
-          document.activeElement !== document.getElementById("chatInput")
-        ) {
-          document.getElementById("chatInput").focus();
-          e.preventDefault();
-          return;
-        }
-
-        // Level Editor toggle
-        if (e.key.toLowerCase() === "l") {
-          editorMode = !editorMode;
-          document.getElementById("editorPanel").style.display = editorMode
-            ? "block"
-            : "none";
-
-          if (editorMode && document.pointerLockElement) {
-            document.exitPointerLock();
-          }
-          if (!editorMode) deselect();
-          return;
-        }
-
-        // Delete selected tree (works with both Delete and Del keys)
-        if (
-          editorMode &&
-          (e.key === "Delete" || e.key === "Del") &&
-          selectedId
-        ) {
-          if (socket) socket.emit("removeTree", selectedId);
-          deselect();
-          return;
-        }
-
-        // Normal movement keys
-        if (document.activeElement !== document.getElementById("chatInput")) {
-          keys[e.key.toLowerCase()] = true;
-          lastMovementTime = Date.now();
-        }
+        playerBody.position.y = py + 15;
+      });
+      socket.on("waterBodyAdded", (water) => {
+        createWaterMesh(water.id, water.points, water.level);
       });
 
-      const canvas = renderer.domElement;
+      socket.on("waterBodyRemoved", (id) => {
+        const index = waters.findIndex((w) => w.id === id);
+        if (index !== -1) {
+          scene.remove(waters[index].mesh);
+          waters.splice(index, 1);
+        }
+        if (selectedWaterId === id) selectedWaterId = null;
+      });
 
-      // === Tree + Sculpting + Water Mouse Handlers ===
-      canvas.addEventListener("mousedown", (e) => {
-        if (
-          !gameActive ||
-          !editorMode ||
-          document.activeElement === document.getElementById("chatInput")
-        )
-          return;
+      socket.on("waterLevelUpdated", (data) => {
+        const w = waters.find((w) => w.id === data.id);
+        if (w) {
+          w.mesh.position.y = data.level;
+          w.level = data.level;
+        }
+      });
+    }
 
-        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-        raycaster.setFromCamera(mouse, camera);
+    function addChatMessage(name, msg) {
+      const log = document.getElementById("chatMessages");
+      const entry = document.createElement("div");
+      entry.innerHTML = `<b>${name}:</b> ${msg}`;
+      log.appendChild(entry);
+      log.scrollTop = log.scrollHeight;
 
-        // 1. Tree selection first
-        const treeMeshes = trees.flatMap((t) => t.group.children);
-        const treeIntersects = raycaster.intersectObjects(treeMeshes, false);
-        if (treeIntersects.length > 0) {
-          const hitId = treeIntersects[0].object.parent.userData.id;
-          selectTree(hitId);
+      if (log.children.length > 100) log.removeChild(log.children[0]);
+    }
+
+    function startGame(name) {
+      document.getElementById("charListScreen").style.display = "none";
+      document.getElementById("hud").style.display = "block";
+      document.getElementById("instructions").style.display = "block";
+      document.getElementById("chatContainer").style.display = "block";
+      document.getElementById("hudName").textContent = name;
+      document.getElementById("hudLevel").textContent =
+        currentCharacter.level;
+
+      localNameTag = createNameTag(name, currentCharacter.level, true);
+      localNameTag.style.color = currentCharacter.nameColor || "#00ff88";
+
+      gameActive = true;
+      document.getElementById("coordsPanel").style.display = "block";
+
+      lastMovementTime = Date.now();
+
+      freeLookYaw = playerBody.rotation.y;
+
+      initSocket();
+      socket.emit("requestWorld");
+
+      // Snap player perfectly to the loaded terrain
+      const surfaceY = getTerrainHeight(
+        playerBody.position.x,
+        playerBody.position.z,
+      );
+      playerBody.position.y = surfaceY + 15;
+      playerHead.position.copy(playerBody.position);
+      playerHead.position.y += 23;
+
+      console.log(
+        `✅ Player snapped to terrain Y = ${playerBody.position.y.toFixed(1)}`,
+      );
+    }
+
+    function logout() {
+      saveCharacter();
+      if (socket) socket.disconnect();
+      Object.keys(otherPlayers).forEach((id) => removeOtherPlayer(id));
+      otherPlayers = {};
+      if (localNameTag && localNameTag.parentNode)
+        localNameTag.parentNode.removeChild(localNameTag);
+      localNameTag = null;
+      document.getElementById("coordsPanel").style.display = "none";
+      gameActive = false;
+      document.getElementById("hud").style.display = "none";
+      document.getElementById("instructions").style.display = "none";
+      document.getElementById("chatContainer").style.display = "none";
+      document.getElementById("accountScreen").style.display = "flex";
+    }
+
+    // Full camera + movement
+    const keys = {};
+    let isRightMouse = false,
+      isLeftMouse = false;
+    let freeLookYaw = 0,
+      freeLookPitch = 0,
+      cameraPitch = 0;
+    let cameraDistance = 125;
+    const moveSpeed = 1.6,
+      turnSpeed = 0.022;
+    let velocityY = 0,
+      isJumping = false;
+    let horizontalVelocity = new THREE.Vector3();
+
+    function normalizeAngle(a) {
+      a = a % (Math.PI * 2);
+      if (a < -Math.PI) a += Math.PI * 2;
+      if (a > Math.PI) a -= Math.PI * 2;
+      return a;
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (!gameActive) return;
+
+      // Enter to focus chat
+      if (
+        e.key === "Enter" &&
+        document.activeElement !== document.getElementById("chatInput")
+      ) {
+        document.getElementById("chatInput").focus();
+        e.preventDefault();
+        return;
+      }
+
+      // Level Editor toggle
+      if (e.key.toLowerCase() === "l") {
+        editorMode = !editorMode;
+        document.getElementById("editorPanel").style.display = editorMode
+          ? "block"
+          : "none";
+
+        if (editorMode && document.pointerLockElement) {
+          document.exitPointerLock();
+        }
+        if (!editorMode) deselect();
+        return;
+      }
+
+      // Delete selected tree (works with both Delete and Del keys)
+      if (
+        editorMode &&
+        (e.key === "Delete" || e.key === "Del") &&
+        selectedId
+      ) {
+        if (socket) socket.emit("removeTree", selectedId);
+        deselect();
+        return;
+      }
+
+      // Normal movement keys
+      if (document.activeElement !== document.getElementById("chatInput")) {
+        keys[e.key.toLowerCase()] = true;
+        lastMovementTime = Date.now();
+      }
+    });
+
+    const canvas = renderer.domElement;
+
+    // === Tree + Sculpting + Water Mouse Handlers ===
+    canvas.addEventListener("mousedown", (e) => {
+      if (
+        !gameActive ||
+        !editorMode ||
+        document.activeElement === document.getElementById("chatInput")
+      ) return;
+
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+
+      // Priority 1: Tree selection (always allowed)
+      const treeMeshes = trees.flatMap((t) => t.group.children);
+      const treeIntersects = raycaster.intersectObjects(treeMeshes, false);
+      if (treeIntersects.length > 0) {
+        const hitId = treeIntersects[0].object.parent.userData.id;
+        selectTree(hitId);
+        return;
+      }
+
+      // Priority 2: Water BODY SELECTION – only when NOT sculpting terrain
+      // (and only if not currently drawing a new water body)
+      if (!isTerrainSculptMode() && !waterMode) {
+        const waterMeshes = waters.map((w) => w.mesh);
+        const waterIntersects = raycaster.intersectObjects(waterMeshes, false);
+        if (waterIntersects.length > 0) {
+          const hitMesh = waterIntersects[0].object;
+          const waterObj = waters.find((w) => w.mesh === hitMesh);
+          if (waterObj) {
+            selectWater(waterObj.id);
+            return;
+          }
+        }
+      }
+
+      // Priority 3: Water DRAWING / COMPLETION (only in water mode)
+      if (waterMode) {
+        const groundIntersects = raycaster.intersectObject(ground);
+        if (groundIntersects.length === 0) return;
+        const point = groundIntersects[0].point;
+
+        if (e.button === 0) { // Left → add point
+          currentWaterPoints.push({ x: point.x, z: point.z });
+          updateWaterPreview();
           return;
         }
-
-        // 2. Water mode drawing OR selection
-        if (waterMode) {
-          const groundIntersects = raycaster.intersectObject(ground);
-          if (groundIntersects.length === 0) return;
-          const point = groundIntersects[0].point;
-
-          if (e.button === 0) {
-            // Left-click = add point
-            currentWaterPoints.push({ x: point.x, z: point.z });
-            updateWaterPreview();
-          } else if (e.button === 2 && currentWaterPoints.length >= 3) {
-            // Right-click = finish water body
+        else if (e.button === 2) { // Right → finish polygon
+          if (currentWaterPoints.length >= 3) {
             if (socket) {
               let totalHeight = 0;
               currentWaterPoints.forEach(
-                (p) => (totalHeight += getTerrainHeight(p.x, p.z)),
+                (p) => (totalHeight += getTerrainHeight(p.x, p.z))
               );
               const avgHeight = totalHeight / currentWaterPoints.length + 4;
               socket.emit("addWaterBody", {
@@ -1370,568 +1383,648 @@
               waterPreviewLine = null;
             }
           }
-          return;
+          return;  // ← important: consume the event so it doesn't fall through
         }
+      }
 
-        // NEW: Check for water click (selection)
-        const waterMeshes = waters.map((w) => w.mesh);
-        const waterIntersects = raycaster.intersectObjects(waterMeshes, false);
-        if (waterIntersects.length > 0) {
-          const hitMesh = waterIntersects[0].object;
-          const waterObj = waters.find((w) => w.mesh === hitMesh);
-          if (waterObj) {
-            selectWater(waterObj.id);
-            return;
-          }
-        }
+      // Priority 4: Terrain sculpting + tree placement (fallback)
+      const groundIntersects = raycaster.intersectObject(ground);
+      if (groundIntersects.length === 0) return;
 
-        // 3. Normal sculpt/tree
-        const groundIntersects = raycaster.intersectObject(ground);
-        if (groundIntersects.length === 0) return;
-
-        if (e.button === 0) {
-          isSculpting = true;
-          saveUndoState();
-          sculptAtMouse(e);
-        } else if (e.button === 2) {
+      if (e.button === 0) { // Left → sculpt
+        isSculpting = true;
+        saveUndoState();
+        sculptAtMouse(e);
+      }
+      else if (e.button === 2) { // Right → place tree (only if not in water mode)
+        if (!waterMode) {
           const point = groundIntersects[0].point;
           if (socket) socket.emit("addTree", { x: point.x, z: point.z });
         }
-      });
+      }
+    });
 
-      canvas.addEventListener("mousemove", (e) => {
-        if (!isSculpting || !editorMode) return;
-        sculptAtMouse(e);
-      });
+    canvas.addEventListener("mousemove", (e) => {
+      if (!isSculpting || !editorMode) return;
+      sculptAtMouse(e);
+    });
 
-      window.addEventListener("mouseup", () => {
-        if (isSculpting) {
-          isSculpting = false;
-          if (socket) {
-            socket.emit("updateTerrain", Array.from(terrainHeights));
-            console.log(
-              "💾 Terrain changes saved to world.json + sent to all players",
-            );
-          }
-        }
-      });
-
-      // Prevent right-click menu when in editor
-      canvas.addEventListener("contextmenu", (e) => {
-        if (editorMode) e.preventDefault();
-      });
-
-      window.addEventListener("keyup", (e) => {
-        if (
-          gameActive &&
-          document.activeElement !== document.getElementById("chatInput")
-        )
-          keys[e.key.toLowerCase()] = false;
-      });
-
-      // Wheel zoom - now IGNORES zoom when mouse is over chat
-      window.addEventListener("wheel", (e) => {
-        if (gameActive && !isHoveringChat) {
-          cameraDistance += e.deltaY * 0.1;
-          cameraDistance = Math.max(60, Math.min(280, cameraDistance));
-        }
-      });
-
-      canvas.addEventListener("mousedown", (e) => {
-        if (
-          !gameActive ||
-          document.activeElement === document.getElementById("chatInput") ||
-          editorMode // ← NEW LINE
-        )
-          return;
-        lastMovementTime = Date.now();
-        if (e.button === 2) {
-          isRightMouse = true;
-          canvas.requestPointerLock();
-          const dx = camera.position.x - playerBody.position.x,
-            dz = camera.position.z - playerBody.position.z;
-          const hd = Math.sqrt(dx * dx + dz * dz) || 1,
-            dy = camera.position.y - (playerBody.position.y + 55);
-          cameraPitch = Math.atan2(dy, hd);
-          playerBody.rotation.y = Math.atan2(dx, dz);
-        }
-        if (e.button === 0) {
-          isLeftMouse = true;
-          canvas.requestPointerLock();
-          const dx = camera.position.x - playerBody.position.x,
-            dz = camera.position.z - playerBody.position.z;
-          const hd = Math.sqrt(dx * dx + dz * dz) || 1,
-            dy = camera.position.y - (playerBody.position.y + 55);
-          freeLookYaw = Math.atan2(dx, dz);
-          freeLookPitch = Math.atan2(dy, hd);
-        }
-      });
-
-      window.addEventListener("mouseup", () => {
-        if (!gameActive) return;
-        if (isRightMouse) {
-          freeLookYaw = playerBody.rotation.y;
-          freeLookPitch = cameraPitch;
-        }
-        isRightMouse = isLeftMouse = false;
-        if (document.pointerLockElement) document.exitPointerLock();
-      });
-
-      window.addEventListener("mousemove", (e) => {
-        if (
-          !gameActive ||
-          !document.pointerLockElement ||
-          document.activeElement === document.getElementById("chatInput")
-        )
-          return;
-        lastMovementTime = Date.now();
-        if (isRightMouse) {
-          playerBody.rotation.y -= e.movementX * 0.0028;
-          cameraPitch += e.movementY * 0.022;
-          cameraPitch = Math.max(-1.45, Math.min(1.45, cameraPitch));
-        }
-        if (isLeftMouse) {
-          freeLookYaw -= e.movementX * 0.0028;
-          freeLookPitch += e.movementY * 0.022;
-          freeLookPitch = Math.max(-1.45, Math.min(1.45, freeLookPitch));
-        }
-      });
-      window.addEventListener("contextmenu", (e) => e.preventDefault());
-
-      function animate() {
-        requestAnimationFrame(animate);
-        if (!gameActive) {
-          renderer.render(scene, camera);
-          return;
-        }
-
-        const isTyping =
-          document.activeElement === document.getElementById("chatInput");
-
-        if (!isTyping) {
-          const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(
-            playerBody.quaternion,
+    window.addEventListener("mouseup", () => {
+      if (isSculpting) {
+        isSculpting = false;
+        if (socket) {
+          socket.emit("updateTerrain", Array.from(terrainHeights));
+          console.log(
+            "💾 Terrain changes saved to world.json + sent to all players",
           );
-          const right = new THREE.Vector3(1, 0, 0).applyQuaternion(
-            playerBody.quaternion,
-          );
-          let input = new THREE.Vector3();
-          if (keys["w"]) input.addScaledVector(forward, moveSpeed);
-          if (keys["s"]) input.addScaledVector(forward, -moveSpeed * 0.5);
-          if (keys["q"]) input.addScaledVector(right, -moveSpeed);
-          if (keys["e"]) input.addScaledVector(right, moveSpeed);
-          if (input.length() > 0) input.normalize().multiplyScalar(moveSpeed);
-
-          if (!isJumping) horizontalVelocity.copy(input);
-          playerBody.position.add(horizontalVelocity);
-
-          if (keys["a"]) {
-            playerBody.rotation.y += turnSpeed;
-            if (!isLeftMouse && !isRightMouse) {
-              freeLookYaw += turnSpeed;
-            }
-          }
-          if (keys["d"]) {
-            playerBody.rotation.y -= turnSpeed;
-            if (!isLeftMouse && !isRightMouse) {
-              freeLookYaw -= turnSpeed;
-            }
-          }
-
-          if (keys[" "] && !isJumping) {
-            velocityY = 1.6;
-            isJumping = true;
-          }
-          velocityY -= 0.042;
-          playerBody.position.y += velocityY;
-
-          // === ACCURATE MESH COLLISION (no more clipping/springing) ===
-          const surfaceY = getTerrainHeight(
-            playerBody.position.x,
-            playerBody.position.z,
-          );
-
-          if (playerBody.position.y - 15 < surfaceY) {
-            playerBody.position.y = surfaceY + 15;
-            velocityY = 0;
-            isJumping = false;
-          }
         }
+      }
+    });
 
-        playerHead.position.copy(playerBody.position);
-        playerHead.position.y = playerBody.position.y + 23;
+    // Prevent right-click menu when in editor
+    canvas.addEventListener("contextmenu", (e) => {
+      if (editorMode) e.preventDefault();
+    });
 
-        if (socket && Date.now() - lastUpdateTime > UPDATE_RATE) {
-          const isAFK = Date.now() - lastMovementTime > AFK_TIMEOUT;
-          socket.emit("playerUpdate", {
-            x: playerBody.position.x,
-            y: playerBody.position.y,
-            z: playerBody.position.z,
-            rot: playerBody.rotation.y,
-            isAFK: isAFK,
-          });
-          lastUpdateTime = Date.now();
-        }
+    window.addEventListener("keyup", (e) => {
+      if (
+        gameActive &&
+        document.activeElement !== document.getElementById("chatInput")
+      )
+        keys[e.key.toLowerCase()] = false;
+    });
 
-        Object.values(otherPlayers).forEach((p) => {
-          if (p.targetX !== undefined) {
-            p.body.position.x = lerp(p.body.position.x, p.targetX, 0.25);
-            p.body.position.y = lerp(p.body.position.y, p.targetY, 0.25);
-            p.body.position.z = lerp(p.body.position.z, p.targetZ, 0.25);
-            p.head.position.set(
-              p.body.position.x,
-              p.body.position.y + 23,
-              p.body.position.z,
-            );
-            p.body.rotation.y = lerp(p.body.rotation.y, p.targetRot, 0.25);
-          }
-        });
+    // Wheel zoom - now IGNORES zoom when mouse is over chat
+    window.addEventListener("wheel", (e) => {
+      if (gameActive && !isHoveringChat) {
+        cameraDistance += e.deltaY * 0.1;
+        cameraDistance = Math.max(60, Math.min(280, cameraDistance));
+      }
+    });
 
-        const dist = cameraDistance;
-        let yaw, pitch;
-        if (isLeftMouse) {
-          yaw = freeLookYaw;
-          pitch = freeLookPitch;
-        } else if (isRightMouse) {
-          yaw = playerBody.rotation.y;
-          pitch = cameraPitch;
-        } else {
-          yaw = freeLookYaw;
-          pitch = freeLookPitch;
-        }
+    canvas.addEventListener("mousedown", (e) => {
+      if (
+        !gameActive ||
+        document.activeElement === document.getElementById("chatInput") ||
+        editorMode // ← NEW LINE
+      )
+        return;
+      lastMovementTime = Date.now();
+      if (e.button === 2) {
+        isRightMouse = true;
+        canvas.requestPointerLock();
+        const dx = camera.position.x - playerBody.position.x,
+          dz = camera.position.z - playerBody.position.z;
+        const hd = Math.sqrt(dx * dx + dz * dz) || 1,
+          dy = camera.position.y - (playerBody.position.y + 55);
+        cameraPitch = Math.atan2(dy, hd);
+        playerBody.rotation.y = Math.atan2(dx, dz);
+      }
+      if (e.button === 0) {
+        isLeftMouse = true;
+        canvas.requestPointerLock();
+        const dx = camera.position.x - playerBody.position.x,
+          dz = camera.position.z - playerBody.position.z;
+        const hd = Math.sqrt(dx * dx + dz * dz) || 1,
+          dy = camera.position.y - (playerBody.position.y + 55);
+        freeLookYaw = Math.atan2(dx, dz);
+        freeLookPitch = Math.atan2(dy, hd);
+      }
+    });
 
-        const cameraOffset = new THREE.Vector3(
-          dist * Math.sin(yaw) * Math.cos(pitch),
-          55 + dist * Math.sin(pitch),
-          dist * Math.cos(yaw) * Math.cos(pitch),
+    window.addEventListener("mouseup", () => {
+      if (!gameActive) return;
+      if (isRightMouse) {
+        freeLookYaw = playerBody.rotation.y;
+        freeLookPitch = cameraPitch;
+      }
+      isRightMouse = isLeftMouse = false;
+      if (document.pointerLockElement) document.exitPointerLock();
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (
+        !gameActive ||
+        !document.pointerLockElement ||
+        document.activeElement === document.getElementById("chatInput")
+      )
+        return;
+      lastMovementTime = Date.now();
+      if (isRightMouse) {
+        playerBody.rotation.y -= e.movementX * 0.0028;
+        cameraPitch += e.movementY * 0.022;
+        cameraPitch = Math.max(-1.45, Math.min(1.45, cameraPitch));
+      }
+      if (isLeftMouse) {
+        freeLookYaw -= e.movementX * 0.0028;
+        freeLookPitch += e.movementY * 0.022;
+        freeLookPitch = Math.max(-1.45, Math.min(1.45, freeLookPitch));
+      }
+    });
+    window.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (!gameActive) {
+        renderer.render(scene, camera);
+        return;
+      }
+
+      const isTyping =
+        document.activeElement === document.getElementById("chatInput");
+
+      if (!isTyping) {
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(
+          playerBody.quaternion,
         );
-        camera.position.copy(playerBody.position).add(cameraOffset);
-        if (camera.position.y < playerBody.position.y + 5)
-          camera.position.y = playerBody.position.y + 5;
-        camera.lookAt(
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(
+          playerBody.quaternion,
+        );
+        let input = new THREE.Vector3();
+        if (keys["w"]) input.addScaledVector(forward, moveSpeed);
+        if (keys["s"]) input.addScaledVector(forward, -moveSpeed * 0.5);
+        if (keys["q"]) input.addScaledVector(right, -moveSpeed);
+        if (keys["e"]) input.addScaledVector(right, moveSpeed);
+        if (input.length() > 0) input.normalize().multiplyScalar(moveSpeed);
+
+        if (!isJumping) horizontalVelocity.copy(input);
+        playerBody.position.add(horizontalVelocity);
+
+        if (keys["a"]) {
+          playerBody.rotation.y += turnSpeed;
+          if (!isLeftMouse && !isRightMouse) {
+            freeLookYaw += turnSpeed;
+          }
+        }
+        if (keys["d"]) {
+          playerBody.rotation.y -= turnSpeed;
+          if (!isLeftMouse && !isRightMouse) {
+            freeLookYaw -= turnSpeed;
+          }
+        }
+
+        if (keys[" "] && !isJumping) {
+          velocityY = 1.6;
+          isJumping = true;
+        }
+        velocityY -= 0.042;
+        playerBody.position.y += velocityY;
+
+        // === ACCURATE MESH COLLISION (no more clipping/springing) ===
+        const surfaceY = getTerrainHeight(
           playerBody.position.x,
-          playerBody.position.y + 25,
           playerBody.position.z,
         );
 
-        updateNameTags();
-        updateCoordsDisplay();
-        // Water ripple animation
-        const time = Date.now() * 0.001;
-        waters.forEach((w) => {
-          if (!w.mesh.userData.originalVertices) return;
-          const verts = w.mesh.geometry.attributes.position.array;
-          for (let i = 0; i < verts.length; i += 3) {
-            const orig = w.mesh.userData.originalVertices[i + 1];
-            verts[i + 1] =
-              orig + Math.sin(time * 3 + w.mesh.userData.timeOffset + i) * 0.6;
-          }
-          w.mesh.geometry.attributes.position.needsUpdate = true;
-        });
-
-        renderer.render(scene, camera);
-      }
-
-      function setupUI() {
-        document
-          .getElementById("accountContinue")
-          .addEventListener("click", () => {
-            currentAccount =
-              document.getElementById("accountName").value.trim() || "Guest";
-            document.getElementById("accountScreen").style.display = "none";
-            showCharacterList();
-          });
-
-        function showCharacterList() {
-          const container = document.getElementById("charList");
-          container.innerHTML = "";
-          const chars = loadAllCharacters();
-          if (chars.length === 0) {
-            container.innerHTML = "<p>No characters yet.</p>";
-          } else {
-            chars.forEach((char) => {
-              const btn = document.createElement("button");
-              btn.textContent = `${char.name} — ${char.race} ${char.gender} (Lv ${char.level || 1})`;
-              btn.onclick = () => {
-                if (loadCharacter(char.name)) {
-                  document.getElementById("charListScreen").style.display =
-                    "none";
-                  startGame(char.name);
-                }
-              };
-              container.appendChild(btn);
-            });
-          }
-          document.getElementById("currentAccount").textContent =
-            currentAccount;
-          document.getElementById("charListScreen").style.display = "flex";
-        }
-
-        document
-          .getElementById("createNewBtn")
-          .addEventListener("click", () => {
-            document.getElementById("charListScreen").style.display = "none";
-            document.getElementById("creationScreen").style.display = "flex";
-            document.getElementById("createName").focus();
-          });
-
-        document.querySelectorAll(".race-btn").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            selectedRace = btn.dataset.race;
-            document
-              .querySelectorAll(".race-btn")
-              .forEach((b) => b.classList.remove("selected"));
-            btn.classList.add("selected");
-          });
-        });
-
-        document.querySelectorAll(".gender-btn").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            selectedGender = btn.dataset.gender;
-            document
-              .querySelectorAll(".gender-btn")
-              .forEach((b) => b.classList.remove("selected"));
-            btn.classList.add("selected");
-          });
-        });
-
-        document
-          .getElementById("enterWorldBtn")
-          .addEventListener("click", () => {
-            const name = document.getElementById("createName").value.trim();
-            if (!name) return alert("Please enter a character name");
-            if (!selectedRace || !selectedGender)
-              return alert("Please select both race and gender");
-
-            currentCharacter = {
-              name,
-              race: selectedRace,
-              gender: selectedGender,
-              level: 1,
-              xp: 0,
-              inventory: [],
-              deathStatus: false,
-              x: 0,
-              z: 0,
-              rot: 0,
-              lastPlayed: Date.now(),
-            };
-            const spawn = raceSpawns[selectedRace] || { x: 0, z: 0 };
-            playerBody.position.set(spawn.x, 15, spawn.z);
-            playerBody.material.color.setHex(
-              raceColors[selectedRace] || 0x00ffff,
-            );
-            playerHead.material.color.setHex(
-              genderHeadColors[selectedGender] || 0x00aaff,
-            );
-            saveCharacter();
-            document.getElementById("creationScreen").style.display = "none";
-            startGame(name);
-          });
-
-        document.getElementById("logoutBtn").addEventListener("click", logout);
-
-        document
-          .getElementById("saveNameColorBtn")
-          .addEventListener("click", saveNameColor);
-        document
-          .getElementById("closeNamePanelBtn")
-          .addEventListener("click", hideNameCustomPanel);
-      }
-
-      let selectedRace = null;
-      let selectedGender = null;
-
-      function loadAllCharacters() {
-        const list = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key.startsWith(STORAGE_PREFIX)) {
-            const char = JSON.parse(localStorage.getItem(key));
-            if (char.name) list.push(char);
-          }
-        }
-        return list;
-      }
-
-      function saveCharacter() {
-        if (!currentCharacter || !gameActive) return;
-        currentCharacter.x = playerBody.position.x;
-        currentCharacter.z = playerBody.position.z;
-        currentCharacter.rot = playerBody.rotation.y;
-        currentCharacter.lastPlayed = Date.now();
-        localStorage.setItem(
-          STORAGE_PREFIX + currentCharacter.name.toLowerCase(),
-          JSON.stringify(currentCharacter),
-        );
-      }
-
-      function loadCharacter(name) {
-        const key = STORAGE_PREFIX + name.toLowerCase();
-        const saved = localStorage.getItem(key);
-        if (saved) {
-          currentCharacter = JSON.parse(saved);
-          currentCharacter.level = currentCharacter.level || 1;
-          currentCharacter.xp =
-            currentCharacter.xp !== undefined ? currentCharacter.xp : 0;
-          currentCharacter.inventory = currentCharacter.inventory || [];
-          currentCharacter.deathStatus =
-            currentCharacter.deathStatus !== undefined
-              ? currentCharacter.deathStatus
-              : false;
-          playerBody.position.set(
-            currentCharacter.x || 0,
-            15,
-            currentCharacter.z || 0,
-          );
-          playerBody.rotation.y = currentCharacter.rot || 0;
-
-          // Spawn player ON the actual terrain
-          const surfaceY = getTerrainHeight(
-            playerBody.position.x,
-            playerBody.position.z,
-          );
+        if (playerBody.position.y - 15 < surfaceY) {
           playerBody.position.y = surfaceY + 15;
+          velocityY = 0;
+          isJumping = false;
+        }
+      }
+
+      playerHead.position.copy(playerBody.position);
+      playerHead.position.y = playerBody.position.y + 23;
+
+      if (socket && Date.now() - lastUpdateTime > UPDATE_RATE) {
+        const isAFK = Date.now() - lastMovementTime > AFK_TIMEOUT;
+        socket.emit("playerUpdate", {
+          x: playerBody.position.x,
+          y: playerBody.position.y,
+          z: playerBody.position.z,
+          rot: playerBody.rotation.y,
+          isAFK: isAFK,
+        });
+        lastUpdateTime = Date.now();
+      }
+
+      Object.values(otherPlayers).forEach((p) => {
+        if (p.targetX !== undefined) {
+          p.body.position.x = lerp(p.body.position.x, p.targetX, 0.25);
+          p.body.position.y = lerp(p.body.position.y, p.targetY, 0.25);
+          p.body.position.z = lerp(p.body.position.z, p.targetZ, 0.25);
+          p.head.position.set(
+            p.body.position.x,
+            p.body.position.y + 23,
+            p.body.position.z,
+          );
+          p.body.rotation.y = lerp(p.body.rotation.y, p.targetRot, 0.25);
+        }
+      });
+
+      const dist = cameraDistance;
+      let yaw, pitch;
+      if (isLeftMouse) {
+        yaw = freeLookYaw;
+        pitch = freeLookPitch;
+      } else if (isRightMouse) {
+        yaw = playerBody.rotation.y;
+        pitch = cameraPitch;
+      } else {
+        yaw = freeLookYaw;
+        pitch = freeLookPitch;
+      }
+
+      const cameraOffset = new THREE.Vector3(
+        dist * Math.sin(yaw) * Math.cos(pitch),
+        55 + dist * Math.sin(pitch),
+        dist * Math.cos(yaw) * Math.cos(pitch),
+      );
+      camera.position.copy(playerBody.position).add(cameraOffset);
+      if (camera.position.y < playerBody.position.y + 5)
+        camera.position.y = playerBody.position.y + 5;
+      camera.lookAt(
+        playerBody.position.x,
+        playerBody.position.y + 25,
+        playerBody.position.z,
+      );
+
+      updateNameTags();
+      updateCoordsDisplay();
+      // Water ripple animation
+      const time = Date.now() * 0.001;
+      waters.forEach((w) => {
+        if (!w.mesh.userData.originalVertices) return;
+        const verts = w.mesh.geometry.attributes.position.array;
+        for (let i = 0; i < verts.length; i += 3) {
+          const orig = w.mesh.userData.originalVertices[i + 1];
+          verts[i + 1] =
+            orig + Math.sin(time * 3 + w.mesh.userData.timeOffset + i) * 0.6;
+        }
+        w.mesh.geometry.attributes.position.needsUpdate = true;
+      });
+
+      renderer.render(scene, camera);
+    }
+
+    function setupUI() {
+      document
+        .getElementById("accountContinue")
+        .addEventListener("click", () => {
+          currentAccount =
+            document.getElementById("accountName").value.trim() || "Guest";
+          document.getElementById("accountScreen").style.display = "none";
+          showCharacterList();
+        });
+
+      function showCharacterList() {
+        const container = document.getElementById("charList");
+        container.innerHTML = "";
+        const chars = loadAllCharacters();
+        if (chars.length === 0) {
+          container.innerHTML = "<p>No characters yet.</p>";
+        } else {
+          chars.forEach((char) => {
+            const btn = document.createElement("button");
+            btn.textContent = `${char.name} — ${char.race} ${char.gender} (Lv ${char.level || 1})`;
+            btn.onclick = () => {
+              if (loadCharacter(char.name)) {
+                document.getElementById("charListScreen").style.display =
+                  "none";
+                startGame(char.name);
+              }
+            };
+            container.appendChild(btn);
+          });
+        }
+        document.getElementById("currentAccount").textContent =
+          currentAccount;
+        document.getElementById("charListScreen").style.display = "flex";
+      }
+
+      document
+        .getElementById("createNewBtn")
+        .addEventListener("click", () => {
+          document.getElementById("charListScreen").style.display = "none";
+          document.getElementById("creationScreen").style.display = "flex";
+          document.getElementById("createName").focus();
+        });
+
+      document.querySelectorAll(".race-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          selectedRace = btn.dataset.race;
+          document
+            .querySelectorAll(".race-btn")
+            .forEach((b) => b.classList.remove("selected"));
+          btn.classList.add("selected");
+        });
+      });
+
+      document.querySelectorAll(".gender-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          selectedGender = btn.dataset.gender;
+          document
+            .querySelectorAll(".gender-btn")
+            .forEach((b) => b.classList.remove("selected"));
+          btn.classList.add("selected");
+        });
+      });
+
+      document
+        .getElementById("enterWorldBtn")
+        .addEventListener("click", () => {
+          const name = document.getElementById("createName").value.trim();
+          if (!name) return alert("Please enter a character name");
+          if (!selectedRace || !selectedGender)
+            return alert("Please select both race and gender");
+
+          currentCharacter = {
+            name,
+            race: selectedRace,
+            gender: selectedGender,
+            level: 1,
+            xp: 0,
+            inventory: [],
+            deathStatus: false,
+            x: 0,
+            z: 0,
+            rot: 0,
+            lastPlayed: Date.now(),
+          };
+          const spawn = raceSpawns[selectedRace] || { x: 0, z: 0 };
+          playerBody.position.set(spawn.x, 15, spawn.z);
           playerBody.material.color.setHex(
-            raceColors[currentCharacter.race] || 0x00ffff,
+            raceColors[selectedRace] || 0x00ffff,
           );
           playerHead.material.color.setHex(
-            genderHeadColors[currentCharacter.gender] || 0x00aaff,
+            genderHeadColors[selectedGender] || 0x00aaff,
           );
-          console.log("Loaded character:", currentCharacter);
-          return true;
+          saveCharacter();
+          document.getElementById("creationScreen").style.display = "none";
+          startGame(name);
+        });
+
+      document.getElementById("logoutBtn").addEventListener("click", logout);
+
+      document
+        .getElementById("saveNameColorBtn")
+        .addEventListener("click", saveNameColor);
+      document
+        .getElementById("closeNamePanelBtn")
+        .addEventListener("click", hideNameCustomPanel);
+    }
+
+    let selectedRace = null;
+    let selectedGender = null;
+
+    function loadAllCharacters() {
+      const list = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith(STORAGE_PREFIX)) {
+          const char = JSON.parse(localStorage.getItem(key));
+          if (char.name) list.push(char);
         }
-        return false;
       }
-      // ==================== SCULPTING UI SETUP ====================
-      function setupSculptingUI() {
-        const tools = ["Raise", "Lower", "Flatten", "Smooth"];
-        tools.forEach((mode) => {
-          const btn = document.getElementById("btn" + mode);
-          if (btn) {
-            btn.addEventListener("click", () => {
-              sculptMode = mode.toLowerCase();
-              document
-                .querySelectorAll(".tool-btn")
-                .forEach((b) => b.classList.remove("selected"));
-              btn.classList.add("selected");
-            });
-          }
-        });
+      return list;
+    }
 
-        document.getElementById("brushSize").addEventListener("input", (e) => {
-          brushSize = parseFloat(e.target.value);
-          document.getElementById("sizeValue").textContent = brushSize;
-        });
+    function saveCharacter() {
+      if (!currentCharacter || !gameActive) return;
+      currentCharacter.x = playerBody.position.x;
+      currentCharacter.z = playerBody.position.z;
+      currentCharacter.rot = playerBody.rotation.y;
+      currentCharacter.lastPlayed = Date.now();
+      localStorage.setItem(
+        STORAGE_PREFIX + currentCharacter.name.toLowerCase(),
+        JSON.stringify(currentCharacter),
+      );
+    }
 
-        document
-          .getElementById("brushStrength")
-          .addEventListener("input", (e) => {
-            brushStrength = parseFloat(e.target.value);
-            document.getElementById("strengthValue").textContent =
-              brushStrength.toFixed(1);
-          });
+    function loadCharacter(name) {
+      const key = STORAGE_PREFIX + name.toLowerCase();
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        currentCharacter = JSON.parse(saved);
+        currentCharacter.level = currentCharacter.level || 1;
+        currentCharacter.xp =
+          currentCharacter.xp !== undefined ? currentCharacter.xp : 0;
+        currentCharacter.inventory = currentCharacter.inventory || [];
+        currentCharacter.deathStatus =
+          currentCharacter.deathStatus !== undefined
+            ? currentCharacter.deathStatus
+            : false;
+        playerBody.position.set(
+          currentCharacter.x || 0,
+          15,
+          currentCharacter.z || 0,
+        );
+        playerBody.rotation.y = currentCharacter.rot || 0;
 
-        document.getElementById("undoBtn").addEventListener("click", () => {
-          if (undoStack.length === 0 || !socket) return;
-          const previous = undoStack.pop();
-          terrainHeights.set(previous);
-
-          const positions = groundGeo.attributes.position.array;
-          for (let i = 0; i < terrainHeights.length; i++) {
-            positions[i * 3 + 2] = terrainHeights[i];
-          }
-          groundGeo.attributes.position.needsUpdate = true;
-          groundGeo.computeVertexNormals();
-
-          // Snap trees & player
-          trees.forEach((t) => {
-            t.group.position.y = getTerrainHeight(
-              t.group.position.x,
-              t.group.position.z,
-            );
-          });
-          const py = getTerrainHeight(
-            playerBody.position.x,
-            playerBody.position.z,
-          );
-          playerBody.position.y = py + 15;
-
-          socket.emit("updateTerrain", Array.from(terrainHeights));
-        });
-        // Water tool button
-        const waterBtn = document.getElementById("btnWater");
-        if (waterBtn) {
-          waterBtn.addEventListener("click", () => {
-            sculptMode = null;
-            waterMode = !waterMode;
+        // Spawn player ON the actual terrain
+        const surfaceY = getTerrainHeight(
+          playerBody.position.x,
+          playerBody.position.z,
+        );
+        playerBody.position.y = surfaceY + 15;
+        playerBody.material.color.setHex(
+          raceColors[currentCharacter.race] || 0x00ffff,
+        );
+        playerHead.material.color.setHex(
+          genderHeadColors[currentCharacter.gender] || 0x00aaff,
+        );
+        console.log("Loaded character:", currentCharacter);
+        return true;
+      }
+      return false;
+    }
+    // ==================== SCULPTING UI SETUP ====================
+    function setupSculptingUI() {
+      const tools = ["Raise", "Lower", "Flatten", "Smooth"];
+      tools.forEach((mode) => {
+        const btn = document.getElementById("btn" + mode);
+        if (btn) {
+          btn.addEventListener("click", () => {
+            sculptMode = mode.toLowerCase();
             document
               .querySelectorAll(".tool-btn")
               .forEach((b) => b.classList.remove("selected"));
-            if (waterMode) waterBtn.classList.add("selected");
-            currentWaterPoints = [];
-            if (waterPreviewLine) {
-              scene.remove(waterPreviewLine);
-              waterPreviewLine = null;
-            }
+            btn.classList.add("selected");
           });
         }
+      });
 
-        // Water level slider
-        const levelSlider = document.getElementById("waterLevelSlider");
-        if (levelSlider) {
-          levelSlider.addEventListener("input", (e) => {
-            if (!selectedWaterId || !socket) return;
-            const newLevel = parseFloat(e.target.value);
-            document.getElementById("waterLevelValue").textContent = newLevel;
-            socket.emit("updateWaterLevel", {
-              id: selectedWaterId,
-              level: newLevel - 12,
-            });
+      document.getElementById("brushSize").addEventListener("input", (e) => {
+        brushSize = parseFloat(e.target.value);
+        document.getElementById("sizeValue").textContent = brushSize;
+      });
+
+      document
+        .getElementById("brushStrength")
+        .addEventListener("input", (e) => {
+          brushStrength = parseFloat(e.target.value);
+          document.getElementById("strengthValue").textContent =
+            brushStrength.toFixed(1);
+        });
+
+      document.getElementById("undoBtn").addEventListener("click", () => {
+        if (undoStack.length === 0 || !socket) return;
+        const previous = undoStack.pop();
+        terrainHeights.set(previous);
+
+        const positions = groundGeo.attributes.position.array;
+        for (let i = 0; i < terrainHeights.length; i++) {
+          positions[i * 3 + 2] = terrainHeights[i];
+        }
+        groundGeo.attributes.position.needsUpdate = true;
+        groundGeo.computeVertexNormals();
+
+        // Snap trees & player
+        trees.forEach((t) => {
+          t.group.position.y = getTerrainHeight(
+            t.group.position.x,
+            t.group.position.z,
+          );
+        });
+        const py = getTerrainHeight(
+          playerBody.position.x,
+          playerBody.position.z,
+        );
+        playerBody.position.y = py + 15;
+
+        socket.emit("updateTerrain", Array.from(terrainHeights));
+      });
+      // Water tool button
+      const waterBtn = document.getElementById("btnWater");
+      if (waterBtn) {
+        waterBtn.addEventListener("click", () => {
+          sculptMode = null;
+          waterMode = !waterMode;
+          document
+            .querySelectorAll(".tool-btn")
+            .forEach((b) => b.classList.remove("selected"));
+          if (waterMode) waterBtn.classList.add("selected");
+          currentWaterPoints = [];
+          if (waterPreviewLine) {
+            scene.remove(waterPreviewLine);
+            waterPreviewLine = null;
+          }
+        });
+      }
+
+      // Water level slider
+      const levelSlider = document.getElementById("waterLevelSlider");
+      if (levelSlider) {
+        levelSlider.addEventListener("input", (e) => {
+          if (!selectedWaterId || !socket) return;
+          const newLevel = parseFloat(e.target.value);
+          document.getElementById("waterLevelValue").textContent = newLevel;
+          socket.emit("updateWaterLevel", {
+            id: selectedWaterId,
+            level: newLevel - 12,
           });
+        });
+      }
+    }
+
+    // ────────────────────────────────────────────────
+    //  Draggable Editor Panel
+    // ────────────────────────────────────────────────
+    function makeDraggable(element) {
+      let isDragging = false;
+      let currentX;
+      let currentY;
+      let initialX;
+      let initialY;
+
+      // We'll use the h2 as the drag handle (you can change this)
+      const header = element.querySelector("h2");
+
+      function dragStart(e) {
+        // Only allow dragging from the header (not from inputs/sliders/buttons)
+        if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON" ||
+          e.target.closest("input, button, label")) {
+          return;
+        }
+
+        if (e.type === "touchstart") {
+          initialX = e.touches[0].clientX - currentX;
+          initialY = e.touches[0].clientY - currentY;
+        } else {
+          initialX = e.clientX - currentX;
+          initialY = e.clientY - currentY;
+        }
+
+        isDragging = true;
+        element.style.cursor = "grabbing";
+      }
+
+      function dragEnd() {
+        isDragging = false;
+        element.style.cursor = "grab";
+      }
+
+      function drag(e) {
+        if (isDragging) {
+          e.preventDefault();
+
+          if (e.type === "touchmove") {
+            currentX = e.touches[0].clientX - initialX;
+            currentY = e.touches[0].clientY - initialY;
+          } else {
+            currentX = e.clientX - initialX;
+            currentY = e.clientY - initialY;
+          }
+
+          // Keep within viewport (optional but recommended)
+          const rect = element.getBoundingClientRect();
+          currentX = Math.max(20, Math.min(window.innerWidth - rect.width - 20, currentX));
+          currentY = Math.max(20, Math.min(window.innerHeight - rect.height - 20, currentY));
+
+          element.style.left = currentX + "px";
+          element.style.top = currentY + "px";
+          element.style.transform = "none";   // disable centering transform
         }
       }
-      setupUI();
-      setupSculptingUI();
-      animate();
 
-      // Chat (no persistence) + hover detection for wheel zoom
-      const chatContainer = document.getElementById("chatContainer");
-      const chatInput = document.getElementById("chatInput");
+      // Initialize position
+      currentX = window.innerWidth / 2 - element.offsetWidth / 2;
+      currentY = window.innerHeight / 2 - element.offsetHeight / 2;
 
-      chatContainer.addEventListener("mouseenter", () => {
-        isHoveringChat = true;
+      // Mouse events
+      header.addEventListener("mousedown", dragStart);
+      document.addEventListener("mousemove", drag);
+      document.addEventListener("mouseup", dragEnd);
+
+      // Touch support (mobile/tablet)
+      header.addEventListener("touchstart", dragStart, { passive: false });
+      document.addEventListener("touchmove", drag, { passive: false });
+      document.addEventListener("touchend", dragEnd);
+
+      // Optional: visual feedback when hovering header
+      header.style.cursor = "grab";
+      header.addEventListener("mouseenter", () => {
+        if (!isDragging) header.style.cursor = "grab";
       });
-      chatContainer.addEventListener("mouseleave", () => {
-        isHoveringChat = false;
-      });
+    }
 
-      chatInput.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") {
-          const msg = chatInput.value.trim();
-          if (msg && socket) {
-            socket.emit("chatMessage", msg);
-            addChatMessage(currentCharacter.name, msg);
-          }
-          chatInput.value = "";
-          chatInput.blur();
+    // Apply to editor panel
+    const editorPanel = document.getElementById("editorPanel");
+    if (editorPanel) {
+      makeDraggable(editorPanel);
+    }
+    setupUI();
+    setupSculptingUI();
+    animate();
+
+    // Chat (no persistence) + hover detection for wheel zoom
+    const chatContainer = document.getElementById("chatContainer");
+    const chatInput = document.getElementById("chatInput");
+
+    chatContainer.addEventListener("mouseenter", () => {
+      isHoveringChat = true;
+    });
+    chatContainer.addEventListener("mouseleave", () => {
+      isHoveringChat = false;
+    });
+
+    chatInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        const msg = chatInput.value.trim();
+        if (msg && socket) {
+          socket.emit("chatMessage", msg);
+          addChatMessage(currentCharacter.name, msg);
         }
-      });
+        chatInput.value = "";
+        chatInput.blur();
+      }
+    });
 
-      window.addEventListener("resize", () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      });
-      document.getElementById("deleteBtn").addEventListener("click", () => {
-        if (selectedId && socket) {
-          socket.emit("removeTree", selectedId);
-          deselect();
-        } else if (selectedWaterId && socket) {
-          socket.emit("removeWaterBody", selectedWaterId);
-          deselectWater();
-        }
-      });
-    </script>
-  </body>
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    document.getElementById("deleteBtn").addEventListener("click", () => {
+      if (selectedId && socket) {
+        socket.emit("removeTree", selectedId);
+        deselect();
+      } else if (selectedWaterId && socket) {
+        socket.emit("removeWaterBody", selectedWaterId);
+        deselectWater();
+      }
+    });
+  </script>
+</body>
+
 </html>
