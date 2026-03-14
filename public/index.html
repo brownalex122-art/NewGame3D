@@ -408,6 +408,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.134.0/examples/js/loaders/GLTFLoader.js"></script>
   <script>
     console.log(
       "🎮 Phase 2.5 FINAL - Chat memory removed • A/D turns camera with player • Mouse wheel zoom DISABLED while hovering chat (so you can scroll messages freely)",
@@ -415,7 +416,7 @@
 
     // Scene & models (unchanged)
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x223322, 8500, 52000);
+    scene.fog = new THREE.FogExp2(0x262C99, 0.00015);   // ← try 0.00005 to 0.00015
     scene.add(new THREE.AmbientLight(0x666666, 0.65));
     const sunLight = new THREE.DirectionalLight(0xffeecc, 1.1);
     sunLight.position.set(150, 250, 100);
@@ -537,6 +538,56 @@
       }
       return 105;
     }
+
+    async function loadPlayerModel(race = "Human", gender = "Male") {
+      playerModel = await createCharacterModel(race, gender);
+      scene.add(playerModel);
+      console.log(`✅ Local ${race} model loaded`);
+    }
+
+    async function createCharacterModel(race = "Human", gender = "Male") {
+      return new Promise((resolve) => {
+        const key = `${race}-${gender}`;
+        const config = raceModels[key] || raceModels.Bird;
+
+        const loader = new THREE.GLTFLoader();
+        loader.load(config.path, (gltf) => {
+          const visualModel = gltf.scene;
+          visualModel.scale.set(config.scale, config.scale, config.scale);
+          visualModel.rotation.y = Math.PI / 2;   // ← your confirmed working rotation
+
+          const container = new THREE.Group();
+          container.add(visualModel);
+
+          // Bonus: animation support for other players too
+          if (gltf.animations && gltf.animations.length > 0) {
+            const mixer = new THREE.AnimationMixer(container);
+            mixer.clipAction(gltf.animations[0]).play();
+            container.userData.mixer = mixer;
+          }
+
+          resolve(container);
+        }, undefined, (err) => {
+          console.warn("Model load failed for other player — using fallback");
+          const fallback = new THREE.Mesh(
+            new THREE.CylinderGeometry(8, 8, 30, 16),
+            new THREE.MeshPhongMaterial({ color: raceColors[race] || 0x00ff88 })
+          );
+          resolve(fallback);
+        });
+      });
+    }
+
+    function createFallbackPlayer() {
+      playerModel = new THREE.Mesh(
+        new THREE.CylinderGeometry(8, 8, 30, 16),
+        new THREE.MeshPhongMaterial({ color: 0x00ff88 })
+      );
+      playerModel.position.y = 15;
+      scene.add(playerModel);
+      console.log("🛠️ Using temporary cylinder (bird.glb failed to load)");
+    }
+
     function sculptAtMouse(e) {
       mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
       mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -607,27 +658,10 @@
       });
     }
 
-    scene.fog = new THREE.Fog(0x113311, 800, 95000);
     // ==================== END HEIGHTMAP ====================
 
-    const playerBody = new THREE.Mesh(
-      new THREE.CylinderGeometry(8, 8, 30, 16),
-      new THREE.MeshPhongMaterial({ color: 0x00ffff }),
-    );
-    playerBody.position.y = 15;
-    scene.add(playerBody);
-    const playerHead = new THREE.Mesh(
-      new THREE.SphereGeometry(8, 16, 16),
-      new THREE.MeshPhongMaterial({ color: 0x00aaff }),
-    );
-    scene.add(playerHead);
-    const frontMarker = new THREE.Mesh(
-      new THREE.ConeGeometry(5, 18, 8),
-      new THREE.MeshPhongMaterial({ color: 0xff0000 }),
-    );
-    frontMarker.rotation.x = Math.PI / 2;
-    frontMarker.position.set(0, 8, -18);
-    playerBody.add(frontMarker);
+    let playerModel = null;
+    let playerMixer = null;   // for bird animations (if any)
 
     let gameActive = false;
     let currentCharacter = null;
@@ -646,6 +680,19 @@
       Orc: { x: -180, z: -60 },
       Forsaken: { x: 220, z: -180 },
       "Night Elf": { x: -120, z: 200 },
+    };
+
+    // === RACE + GENDER → MODEL MAPPING (fully future-proof) ===
+    const raceModels = {
+      "Human-Male": { path: '/models/character/bird-male.glb', scale: 25 },
+      "Human-Female": { path: '/models/character/bird-female.glb', scale: 25 },
+      "Orc-Male": { path: '/models/character/bird-male.glb', scale: 50 },
+      "Orc-Female": { path: '/models/character/bird-female.glb', scale: 50 },
+      "Forsaken-Male": { path: '/models/character/bird-male.glb', scale: 75 },
+      "Forsaken-Female": { path: '/models/character/bird-female.glb', scale: 75 },
+      "Night Elf-Male": { path: '/models/character/bird-male.glb', scale: 100 },
+      "Night Elf-Female": { path: '/models/character/bird-female.glb', scale: 100 },
+      Bird: { path: '/models/character/bird-male.glb', scale: 25 }
     };
 
     let socket = null;
@@ -935,16 +982,17 @@
       const isAFK = now - lastMovementTime > AFK_TIMEOUT;
 
       Object.values(otherPlayers).forEach((p) => {
-        if (!p.body || !p.label) return;
-        const dist = playerBody.position.distanceTo(p.body.position);
+        if (!p.model || !p.label) return;   // ← FIXED (was p.body)
+
+        const dist = playerModel.position.distanceTo(p.model.position);
         if (dist > HIDE_DISTANCE) {
           p.label.style.display = "none";
           return;
         }
         p.label.style.display = "block";
 
-        const vec = p.body.position.clone();
-        vec.y += 48;
+        const vec = p.model.position.clone();
+        vec.y += 55;
         vec.project(camera);
         const x = (vec.x * 0.5 + 0.5) * window.innerWidth;
         const y = (-vec.y * 0.5 + 0.5) * window.innerHeight;
@@ -958,16 +1006,13 @@
         );
         p.label.style.opacity = opacity;
 
-        const afkText = p.isAFK
-          ? ' <span style="color:#ff0">(AFK)</span>'
-          : "";
-        p.label.querySelector("div").innerHTML =
-          `${p.name} <small>Lv${p.level}</small>${afkText}`;
+        const afkText = p.isAFK ? ' <span style="color:#ff0">(AFK)</span>' : "";
+        p.label.querySelector("div").innerHTML = `${p.name} <small>Lv${p.level}</small>${afkText}`;
         p.label.style.color = p.nameColor || "#00ff88";
       });
 
       if (localNameTag) {
-        const vec = playerBody.position.clone();
+        const vec = playerModel.position.clone();
         vec.y += 48;
         vec.project(camera);
         const x = (vec.x * 0.5 + 0.5) * window.innerWidth;
@@ -986,44 +1031,30 @@
     }
 
     function updateCoordsDisplay() {
-      if (!gameActive || !playerBody) return;
+      if (!gameActive || !playerModel) return;
       document.getElementById("posX").textContent =
-        playerBody.position.x.toFixed(1);
+        playerModel.position.x.toFixed(1);
       document.getElementById("posY").textContent =
-        playerBody.position.y.toFixed(1);
+        playerModel.position.y.toFixed(1);
       document.getElementById("posZ").textContent =
-        playerBody.position.z.toFixed(1);
+        playerModel.position.z.toFixed(1);
       document.getElementById("facing").textContent = getCardinalDirection(
-        playerBody.rotation.y,
+        playerModel.rotation.y,
       );
     }
 
-    function createOtherPlayerModel(data) {
+    async function createOtherPlayerModel(data) {
       if (otherPlayers[data.id]) return;
-      const body = new THREE.Mesh(
-        new THREE.CylinderGeometry(8, 8, 30, 16),
-        new THREE.MeshPhongMaterial({
-          color: raceColors[data.race] || 0x00ffff,
-          shininess: 12,
-        }),
-      );
-      body.position.set(data.x || 0, data.y || 15, data.z || 0);
-      body.rotation.y = data.rot || 0;
-      scene.add(body);
-      const head = new THREE.Mesh(
-        new THREE.SphereGeometry(8, 16, 16),
-        new THREE.MeshPhongMaterial({
-          color: genderHeadColors[data.gender] || 0x00aaff,
-          shininess: 12,
-        }),
-      );
-      head.position.set(data.x || 0, (data.y || 15) + 23, data.z || 0);
-      scene.add(head);
+
+      const model = await createCharacterModel(data.race, data.gender);
+      model.position.set(data.x || 0, data.y || 15, data.z || 0);
+      model.rotation.y = data.rot || 0;
+      scene.add(model);
 
       const label = createNameTag(data.name, data.level, false);
+
       otherPlayers[data.id] = {
-        body,
-        head,
+        model,   // ← now the real model
         label,
         targetX: data.x || 0,
         targetY: data.y || 15,
@@ -1039,8 +1070,7 @@
     function removeOtherPlayer(id) {
       const p = otherPlayers[id];
       if (p) {
-        scene.remove(p.body);
-        scene.remove(p.head);
+        scene.remove(p.model);
         if (p.label && p.label.parentNode)
           p.label.parentNode.removeChild(p.label);
         delete otherPlayers[id];
@@ -1056,16 +1086,16 @@
           race: currentCharacter.race,
           gender: currentCharacter.gender,
           level: currentCharacter.level,
-          x: playerBody.position.x,
-          y: playerBody.position.y,
-          z: playerBody.position.z,
-          rot: playerBody.rotation.y,
+          x: playerModel.position.x,
+          y: playerModel.position.y,
+          z: playerModel.position.z,
+          rot: playerModel.rotation.y,
           nameColor: currentCharacter.nameColor || "#00ff88",
         });
       });
-      socket.on("existingPlayers", (list) =>
-        list.forEach((data) => createOtherPlayerModel(data)),
-      );
+      socket.on("existingPlayers", (list) => {
+        list.forEach((data) => createOtherPlayerModel(data));
+      });
       socket.on("newPlayer", (data) => createOtherPlayerModel(data));
       socket.on("playerMoved", (data) => {
         const p = otherPlayers[data.id];
@@ -1130,11 +1160,10 @@
               );
           });
           const py = getTerrainHeight(
-            playerBody.position.x,
-            playerBody.position.z,
+            playerModel.position.x,
+            playerModel.position.z,
           );
-          playerBody.position.y = py + 15;
-          playerHead.position.y = playerBody.position.y + 23;
+          playerModel.position.y = py + 12;
         }
 
         // NEW: Load water bodies from world.json
@@ -1160,10 +1189,10 @@
 
         // Snap local player too
         const py = getTerrainHeight(
-          playerBody.position.x,
-          playerBody.position.z,
+          playerModel.position.x,
+          playerModel.position.z,
         );
-        playerBody.position.y = py + 15;
+        playerModel.position.y = py + 15;
       });
       socket.on("waterBodyAdded", (water) => {
         createWaterMesh(water.id, water.points, water.level);
@@ -1197,40 +1226,48 @@
       if (log.children.length > 100) log.removeChild(log.children[0]);
     }
 
-    function startGame(name) {
+    async function startGame(name) {
       document.getElementById("charListScreen").style.display = "none";
       document.getElementById("hud").style.display = "block";
       document.getElementById("instructions").style.display = "block";
       document.getElementById("chatContainer").style.display = "block";
       document.getElementById("hudName").textContent = name;
-      document.getElementById("hudLevel").textContent =
-        currentCharacter.level;
+      document.getElementById("hudLevel").textContent = currentCharacter.level || 1;
 
-      localNameTag = createNameTag(name, currentCharacter.level, true);
+      localNameTag = createNameTag(name, currentCharacter.level || 1, true);
       localNameTag.style.color = currentCharacter.nameColor || "#00ff88";
 
       gameActive = true;
       document.getElementById("coordsPanel").style.display = "block";
 
       lastMovementTime = Date.now();
+      freeLookYaw = currentCharacter.rot || 0;
 
-      freeLookYaw = playerBody.rotation.y;
+      await loadPlayerModel(currentCharacter.race, currentCharacter.gender);
 
+      // Safety fallback
+      if (!playerModel) {
+        console.error("❌ Player model failed to load — using fallback");
+        createFallbackPlayer();
+      }
+
+      // Restore last saved position + rotation
+      if (currentCharacter.x !== undefined) playerModel.position.x = currentCharacter.x;
+      if (currentCharacter.z !== undefined) playerModel.position.z = currentCharacter.z;
+      if (currentCharacter.rot !== undefined) {
+        playerModel.rotation.y = currentCharacter.rot;
+        freeLookYaw = currentCharacter.rot;
+      }
+
+      // Snap to terrain
+      const surfaceY = getTerrainHeight(playerModel.position.x, playerModel.position.z);
+      playerModel.position.y = surfaceY + 12;
+
+      console.log(`📍 Restored position: ${playerModel.position.x.toFixed(1)}, ${playerModel.position.z.toFixed(1)}`);
+
+      // === CRITICAL: Start multiplayer ===
       initSocket();
       socket.emit("requestWorld");
-
-      // Snap player perfectly to the loaded terrain
-      const surfaceY = getTerrainHeight(
-        playerBody.position.x,
-        playerBody.position.z,
-      );
-      playerBody.position.y = surfaceY + 15;
-      playerHead.position.copy(playerBody.position);
-      playerHead.position.y += 23;
-
-      console.log(
-        `✅ Player snapped to terrain Y = ${playerBody.position.y.toFixed(1)}`,
-      );
     }
 
     function logout() {
@@ -1238,6 +1275,11 @@
       if (socket) socket.disconnect();
       Object.keys(otherPlayers).forEach((id) => removeOtherPlayer(id));
       otherPlayers = {};
+      // Clean up your own model so it doesn't ghost in the scene
+      if (playerModel) {
+        scene.remove(playerModel);
+        playerModel = null;
+      }
       if (localNameTag && localNameTag.parentNode)
         localNameTag.parentNode.removeChild(localNameTag);
       localNameTag = null;
@@ -1453,20 +1495,20 @@
       if (e.button === 2) {
         isRightMouse = true;
         canvas.requestPointerLock();
-        const dx = camera.position.x - playerBody.position.x,
-          dz = camera.position.z - playerBody.position.z;
+        const dx = camera.position.x - playerModel.position.x,
+          dz = camera.position.z - playerModel.position.z;
         const hd = Math.sqrt(dx * dx + dz * dz) || 1,
-          dy = camera.position.y - (playerBody.position.y + 55);
+          dy = camera.position.y - (playerModel.position.y + 55);
         cameraPitch = Math.atan2(dy, hd);
-        playerBody.rotation.y = Math.atan2(dx, dz);
+        playerModel.rotation.y = Math.atan2(dx, dz);
       }
       if (e.button === 0) {
         isLeftMouse = true;
         canvas.requestPointerLock();
-        const dx = camera.position.x - playerBody.position.x,
-          dz = camera.position.z - playerBody.position.z;
+        const dx = camera.position.x - playerModel.position.x,
+          dz = camera.position.z - playerModel.position.z;
         const hd = Math.sqrt(dx * dx + dz * dz) || 1,
-          dy = camera.position.y - (playerBody.position.y + 55);
+          dy = camera.position.y - (playerModel.position.y + 55);
         freeLookYaw = Math.atan2(dx, dz);
         freeLookPitch = Math.atan2(dy, hd);
       }
@@ -1475,7 +1517,7 @@
     window.addEventListener("mouseup", () => {
       if (!gameActive) return;
       if (isRightMouse) {
-        freeLookYaw = playerBody.rotation.y;
+        freeLookYaw = playerModel.rotation.y;
         freeLookPitch = cameraPitch;
       }
       isRightMouse = isLeftMouse = false;
@@ -1491,7 +1533,7 @@
         return;
       lastMovementTime = Date.now();
       if (isRightMouse) {
-        playerBody.rotation.y -= e.movementX * 0.0028;
+        playerModel.rotation.y -= e.movementX * 0.0028;
         cameraPitch += e.movementY * 0.022;
         cameraPitch = Math.max(-1.45, Math.min(1.45, cameraPitch));
       }
@@ -1510,16 +1552,32 @@
         return;
       }
 
+      if (playerModel && playerModel.userData.mixer) playerModel.userData.mixer.update(0.016);
+      if (!playerModel) return;                     // safety while loading
+
       const isTyping =
         document.activeElement === document.getElementById("chatInput");
 
       if (!isTyping) {
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(
-          playerBody.quaternion,
-        );
-        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(
-          playerBody.quaternion,
-        );
+        // Bird movement direction depends on control mode
+        let forward, right;
+
+        // Container now has the correct facing baked in — no extra correction needed
+        const MODEL_OFFSET = 0;
+
+        if (isRightMouse) {
+          // Right-click mode: bird faces exactly where the camera is pointing
+          forward = new THREE.Vector3(0, 0, -1).applyQuaternion(playerModel.quaternion);
+          right = new THREE.Vector3(1, 0, 0).applyQuaternion(playerModel.quaternion);
+        } else {
+          // Normal WASD mode: bird moves in the direction its nose is pointing
+          forward = new THREE.Vector3(0, 0, -1)
+            .applyQuaternion(playerModel.quaternion)
+            .applyAxisAngle(new THREE.Vector3(0, 1, 0), MODEL_OFFSET);
+          right = new THREE.Vector3(1, 0, 0)
+            .applyQuaternion(playerModel.quaternion)
+            .applyAxisAngle(new THREE.Vector3(0, 1, 0), MODEL_OFFSET);
+        }
         let input = new THREE.Vector3();
         if (keys["w"]) input.addScaledVector(forward, moveSpeed);
         if (keys["s"]) input.addScaledVector(forward, -moveSpeed * 0.5);
@@ -1528,16 +1586,16 @@
         if (input.length() > 0) input.normalize().multiplyScalar(moveSpeed);
 
         if (!isJumping) horizontalVelocity.copy(input);
-        playerBody.position.add(horizontalVelocity);
+        playerModel.position.add(horizontalVelocity);
 
         if (keys["a"]) {
-          playerBody.rotation.y += turnSpeed;
+          playerModel.rotation.y += turnSpeed;
           if (!isLeftMouse && !isRightMouse) {
             freeLookYaw += turnSpeed;
           }
         }
         if (keys["d"]) {
-          playerBody.rotation.y -= turnSpeed;
+          playerModel.rotation.y -= turnSpeed;
           if (!isLeftMouse && !isRightMouse) {
             freeLookYaw -= turnSpeed;
           }
@@ -1548,48 +1606,41 @@
           isJumping = true;
         }
         velocityY -= 0.042;
-        playerBody.position.y += velocityY;
+        playerModel.position.y += velocityY;
 
         // === ACCURATE MESH COLLISION (no more clipping/springing) ===
         const surfaceY = getTerrainHeight(
-          playerBody.position.x,
-          playerBody.position.z,
+          playerModel.position.x,
+          playerModel.position.z,
         );
 
-        if (playerBody.position.y - 15 < surfaceY) {
-          playerBody.position.y = surfaceY + 15;
+        if (playerModel.position.y - 1 < surfaceY) {   // ← tuned for bird
+          playerModel.position.y = surfaceY + 1;
           velocityY = 0;
           isJumping = false;
         }
       }
 
-      playerHead.position.copy(playerBody.position);
-      playerHead.position.y = playerBody.position.y + 23;
-
       if (socket && Date.now() - lastUpdateTime > UPDATE_RATE) {
         const isAFK = Date.now() - lastMovementTime > AFK_TIMEOUT;
         socket.emit("playerUpdate", {
-          x: playerBody.position.x,
-          y: playerBody.position.y,
-          z: playerBody.position.z,
-          rot: playerBody.rotation.y,
+          x: playerModel.position.x,
+          y: playerModel.position.y,
+          z: playerModel.position.z,
+          rot: playerModel.rotation.y,
           isAFK: isAFK,
         });
         lastUpdateTime = Date.now();
       }
 
       Object.values(otherPlayers).forEach((p) => {
-        if (p.targetX !== undefined) {
-          p.body.position.x = lerp(p.body.position.x, p.targetX, 0.25);
-          p.body.position.y = lerp(p.body.position.y, p.targetY, 0.25);
-          p.body.position.z = lerp(p.body.position.z, p.targetZ, 0.25);
-          p.head.position.set(
-            p.body.position.x,
-            p.body.position.y + 23,
-            p.body.position.z,
-          );
-          p.body.rotation.y = lerp(p.body.rotation.y, p.targetRot, 0.25);
-        }
+        if (!p.model || p.targetX === undefined) return;
+        p.model.position.x = lerp(p.model.position.x, p.targetX, 0.25);
+        p.model.position.y = lerp(p.model.position.y, p.targetY, 0.25);
+        p.model.position.z = lerp(p.model.position.z, p.targetZ, 0.25);
+        p.model.rotation.y = lerp(p.model.rotation.y, p.targetRot, 0.25);
+
+        if (p.model.userData.mixer) p.model.userData.mixer.update(0.016);
       });
 
       const dist = cameraDistance;
@@ -1598,7 +1649,7 @@
         yaw = freeLookYaw;
         pitch = freeLookPitch;
       } else if (isRightMouse) {
-        yaw = playerBody.rotation.y;
+        yaw = playerModel.rotation.y;
         pitch = cameraPitch;
       } else {
         yaw = freeLookYaw;
@@ -1610,13 +1661,13 @@
         55 + dist * Math.sin(pitch),
         dist * Math.cos(yaw) * Math.cos(pitch),
       );
-      camera.position.copy(playerBody.position).add(cameraOffset);
-      if (camera.position.y < playerBody.position.y + 5)
-        camera.position.y = playerBody.position.y + 5;
+      camera.position.copy(playerModel.position).add(cameraOffset);
+      if (camera.position.y < playerModel.position.y + 5)
+        camera.position.y = playerModel.position.y + 5;
       camera.lookAt(
-        playerBody.position.x,
-        playerBody.position.y + 25,
-        playerBody.position.z,
+        playerModel.position.x,
+        playerModel.position.y + 40,
+        playerModel.position.z,
       );
 
       updateNameTags();
@@ -1722,13 +1773,9 @@
             lastPlayed: Date.now(),
           };
           const spawn = raceSpawns[selectedRace] || { x: 0, z: 0 };
-          playerBody.position.set(spawn.x, 15, spawn.z);
-          playerBody.material.color.setHex(
-            raceColors[selectedRace] || 0x00ffff,
-          );
-          playerHead.material.color.setHex(
-            genderHeadColors[selectedGender] || 0x00aaff,
-          );
+          currentCharacter.x = spawn.x;
+          currentCharacter.z = spawn.z;
+          // Bird model uses its own materials from .glb — no .material.color needed
           saveCharacter();
           document.getElementById("creationScreen").style.display = "none";
           startGame(name);
@@ -1761,9 +1808,9 @@
 
     function saveCharacter() {
       if (!currentCharacter || !gameActive) return;
-      currentCharacter.x = playerBody.position.x;
-      currentCharacter.z = playerBody.position.z;
-      currentCharacter.rot = playerBody.rotation.y;
+      currentCharacter.x = playerModel.position.x;
+      currentCharacter.z = playerModel.position.z;
+      currentCharacter.rot = playerModel.rotation.y;
       currentCharacter.lastPlayed = Date.now();
       localStorage.setItem(
         STORAGE_PREFIX + currentCharacter.name.toLowerCase(),
@@ -1784,25 +1831,7 @@
           currentCharacter.deathStatus !== undefined
             ? currentCharacter.deathStatus
             : false;
-        playerBody.position.set(
-          currentCharacter.x || 0,
-          15,
-          currentCharacter.z || 0,
-        );
-        playerBody.rotation.y = currentCharacter.rot || 0;
-
-        // Spawn player ON the actual terrain
-        const surfaceY = getTerrainHeight(
-          playerBody.position.x,
-          playerBody.position.z,
-        );
-        playerBody.position.y = surfaceY + 15;
-        playerBody.material.color.setHex(
-          raceColors[currentCharacter.race] || 0x00ffff,
-        );
-        playerHead.material.color.setHex(
-          genderHeadColors[currentCharacter.gender] || 0x00aaff,
-        );
+        // Position will be applied in startGame() AFTER the model loads
         console.log("Loaded character:", currentCharacter);
         return true;
       }
@@ -1857,10 +1886,10 @@
           );
         });
         const py = getTerrainHeight(
-          playerBody.position.x,
-          playerBody.position.z,
+          playerModel.position.x,
+          playerModel.position.z,
         );
-        playerBody.position.y = py + 15;
+        playerModel.position.y = py + 15;
 
         socket.emit("updateTerrain", Array.from(terrainHeights));
       });
