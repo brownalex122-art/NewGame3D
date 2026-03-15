@@ -419,8 +419,56 @@
     scene.fog = new THREE.FogExp2(0x262C99, 0.00015);   // ← try 0.00005 to 0.00015
     scene.add(new THREE.AmbientLight(0x666666, 0.65));
     const sunLight = new THREE.DirectionalLight(0xffeecc, 1.1);
-    sunLight.position.set(150, 250, 100);
+    // Add this once, right after const sunLight = new THREE.DirectionalLight...
+    sunLight.target = new THREE.Object3D();
+    scene.add(sunLight.target);
+    sunLight.position.set(150, 150, 100);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 4096;
+    sunLight.shadow.mapSize.height = 4096;
+    sunLight.shadow.camera.near = 10;
+    sunLight.shadow.camera.far = 2500;
+    sunLight.shadow.bias = -0.0012;
     scene.add(sunLight);
+
+    // ────────────────────────────────────────────────
+    // SHADOW CAMERA 100% TIED TO PLAYER + GRASS REGEN (final fix)
+    // ────────────────────────────────────────────────
+    function updateShadowCamera() {
+      if (!playerModel || !sunLight) return;
+
+      const px = playerModel.position.x;
+      const pz = playerModel.position.z;
+      const py = playerModel.position.y;
+
+      // 1. Keep your beautiful angled sunlight
+      sunLight.position.set(px + 525, py + 1000, pz + 1550);
+
+      // 2. CRITICAL: Make the light ALWAYS point directly at the player
+      if (!sunLight.target) {
+        sunLight.target = new THREE.Object3D();
+        scene.add(sunLight.target);   // must be in the scene
+      }
+      sunLight.target.position.set(px + 1800, py + 500, pz - 400);  // slight height offset for better coverage
+      sunLight.target.updateMatrixWorld();
+
+      // 3. Symmetric frustum centered perfectly on the player
+      const radius = 1500;   // perfect sweet spot for your GRASS_RADIUS=5000
+
+      const cam = sunLight.shadow.camera;
+      cam.left = -radius;
+      cam.right = radius;
+      cam.top = radius;
+      cam.bottom = -radius;
+
+      cam.near = 150;
+      cam.far = 4800;
+
+      cam.updateProjectionMatrix();
+      sunLight.updateMatrixWorld();
+      sunLight.shadow.needsUpdate = true;
+    }
+
 
     // ────────────────────────────────────────────────
     // Skybox - Classic Cubemap (6 faces)
@@ -452,6 +500,8 @@
     );
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;   // beautiful soft shadows
     document.body.appendChild(renderer.domElement);
 
     // === FINAL POLISHED ROLLING HILLS - Smooth multi-directional (strong N/S + round hills) ===
@@ -508,6 +558,7 @@
 
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
     scene.add(ground);
 
     // Black wireframe (high contrast so you can see every bump)
@@ -549,6 +600,7 @@
     let rebuildCells = [];
     let rebuildInstanceIndex = 0;
     const BLADES_PER_FRAME = 5000;   // ← tune this (4000 = very safe, 8000+ = faster pop-in)
+    const GRASS_BASE_LIFT = 2.9;
 
     // Keep your createSeededRandom exactly as-is
     function createSeededRandom(seed) {
@@ -615,15 +667,24 @@
     const grassVertexShader = `
   uniform float time;
   attribute float instancePhase;
+  attribute float instanceHeight;
+  attribute vec3 instanceColor;
+
   varying vec2 vUv;
+  varying vec3 vInstanceColor;
 
   void main() {
     vUv = uv;
+    vInstanceColor = instanceColor;
 
     vec3 pos = position;
 
+    // === HEIGHT VARIATION (on top of your existing scale) ===
+    pos.y *= instanceHeight;
+    pos.y += (instanceHeight - 1.0) * 2.9;   // 2.9 = half blade height
+
     // Wind - only affects the top of the blade (uv.y = 0 at base, 1 at tip)
-    float wind = sin(time * 1.8 + instancePhase + pos.x * 1.5) * 1.1 * uv.y;
+    float wind = sin(time * 1.8 + instancePhase + pos.x * 1.5) * 1.1 * uv.y * instanceHeight;
     pos.x += wind;
 
     // Gentle natural curve
@@ -637,19 +698,20 @@
 
     const grassFragmentShader = `
   varying vec2 vUv;
+  varying vec3 vInstanceColor;
 
   void main() {
-    // Rich grass gradient
-    vec3 base = vec3(0.05, 0.38, 0.08);
-    vec3 tip  = vec3(0.55, 0.92, 0.25);
+    // Rich grass gradient + per-instance color tint
+    vec3 base = vec3(0.05, 0.38, 0.08) * vInstanceColor;
+    vec3 tip  = vec3(0.55, 0.92, 0.25) * vInstanceColor;
     vec3 color = mix(base, tip, vUv.y);
 
     // Subtle variation stripes
     color += sin(vUv.y * 18.0) * 0.035;
 
     // Simple directional lighting (matches your sunLight)
-    vec3 lightDir = normalize(vec3(0.6, 0.8, 0.3)); // approx sun direction
-    float lighting = max(0.4, dot(vec3(0.0, 1.0, 0.0), lightDir)); // fake normal up
+    vec3 lightDir = normalize(vec3(0.6, 0.8, 0.3));
+    float lighting = max(0.4, dot(vec3(0.0, 1.0, 0.0), lightDir));
     color *= lighting * 1.25;
 
     color = clamp(color, 0.0, 1.0);
@@ -669,19 +731,76 @@
     grassMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(grassMesh);
 
+    // === GRASS NOW CASTS SHADOWS (animated with wind + height variation) ===
+    grassMesh.castShadow = true;
+    grassMesh.receiveShadow = false;
+    grassMesh.frustumCulled = false;   // ← critical for InstancedMesh spread over 10k+ units
+
+    const grassDepthVertexShader = `
+      uniform float time;
+      attribute float instancePhase;
+      attribute float instanceHeight;
+      // position / uv / instanceMatrix / instanceColor are ALREADY injected by Three.js
+      // (that's why we got redefinition errors)
+
+      void main() {
+        vec3 pos = position;
+
+        // Same height scaling as your main shader
+        pos.y *= instanceHeight;
+        pos.y += (instanceHeight - 1.0) * 2.9;
+
+        // Wind also affects the shadow (looks alive!)
+        float wind = sin(time * 1.8 + instancePhase + pos.x * 1.5) * 0.85 * uv.y * instanceHeight;
+        pos.x += wind;
+
+        // Gentle curve (same as main)
+        pos.z += uv.y * 0.35;
+
+        vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(pos, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `;
+
+    const grassDepthMaterial = new THREE.ShaderMaterial({
+      uniforms: grassMaterial.uniforms,   // shares the time uniform
+      vertexShader: grassDepthVertexShader,
+      fragmentShader: `void main() { gl_FragColor = vec4(0.0); }`,
+      side: THREE.DoubleSide
+    });
+
+    grassMesh.customDepthMaterial = grassDepthMaterial;
+
     // Create phase attribute once (fixes wind + makes grass visible)
     const phases = new Float32Array(MAX_GRASS_INSTANCES);
     instancePhaseAttribute = new THREE.InstancedBufferAttribute(phases, 1);
     grassMesh.geometry.setAttribute('instancePhase', instancePhaseAttribute);
 
-    // Hide everything initially
+    // === NEW: Per-instance height + color variation ===
+    const instanceHeights = new Float32Array(MAX_GRASS_INSTANCES);
+    const instanceColors = new Float32Array(MAX_GRASS_INSTANCES * 3);
+    const instanceHeightAttribute = new THREE.InstancedBufferAttribute(instanceHeights, 1);
+    const instanceColorAttribute = new THREE.InstancedBufferAttribute(instanceColors, 3);
+
+    grassMesh.geometry.setAttribute('instanceHeight', instanceHeightAttribute);
+    grassMesh.geometry.setAttribute('instanceColor', instanceColorAttribute);
+
+    // Hide everything initially + set safe defaults for new attributes
     const dummy = new THREE.Object3D();
     dummy.scale.set(0.001, 0.001, 0.001);
     for (let i = 0; i < MAX_GRASS_INSTANCES; i++) {
       dummy.updateMatrix();
       grassMesh.setMatrixAt(i, dummy.matrix);
+
+      instanceHeightAttribute.array[i] = 1.0;
+      const cIdx = i * 3;
+      instanceColors[cIdx] = 1.0;
+      instanceColors[cIdx + 1] = 1.0;
+      instanceColors[cIdx + 2] = 1.0;
     }
     grassMesh.instanceMatrix.needsUpdate = true;
+    instanceHeightAttribute.needsUpdate = true;
+    instanceColorAttribute.needsUpdate = true;
 
     // ====================== CLEAN REBUILD GRASS ======================
     function updateDynamicGrass() {
@@ -700,6 +819,7 @@
       // Update center for next time
       lastGrassCenterX = px;
       lastGrassCenterZ = pz;
+      updateShadowCamera();   // ← ADD THIS LINE (forces frustum to match new grass instantly)
       if (terrainVersion !== lastTerrainVersion) lastTerrainVersion = terrainVersion;
 
       console.log(`🌿 Grass rebuild triggered — moved ${distMoved.toFixed(0)} units`);
@@ -750,16 +870,32 @@
 
           const wx = cellCX + ox;
           const wz = cellCZ + oz;
-          const y = getTerrainHeightFast(wx, wz) + 0.18;
+          const y = getTerrainHeightFast(wx, wz) + GRASS_BASE_LIFT;
 
           d.position.set(wx, y, wz);
           d.rotation.y = rand() * Math.PI * 2;
-          const h = 0.85 + rand() * 0.45;
-          d.scale.set(0.9 + rand() * 0.4, h, 1);
+          // Base scale (your original) + extra height multiplier for natural variety
+          const baseH = 0.85 + rand() * 0.45;
+          const heightVar = 0.78 + rand() * 0.68;   // 0.78× → 1.46× extra height
+          d.scale.set(0.9 + rand() * 0.4, baseH, 1);
 
           d.updateMatrix();
-          grassMesh.setMatrixAt(rebuildInstanceIndex * GRASS_PER_CELL + k, d.matrix); // note: we switched to cell-based indexing for simplicity
-          instancePhaseAttribute.array[rebuildInstanceIndex * GRASS_PER_CELL + k] = rand() * Math.PI * 2;
+          grassMesh.setMatrixAt(rebuildInstanceIndex * GRASS_PER_CELL + k, d.matrix);
+
+          const instIndex = rebuildInstanceIndex * GRASS_PER_CELL + k;
+          instanceHeightAttribute.array[instIndex] = heightVar;
+
+          // Per-blade color tint (natural green → yellowish/dark variation)
+          const colorShift = (rand() - 0.5) * 2.22;
+          const r = 0.94 + colorShift * 0.6;
+          const g = 0.97 + colorShift * 0.3;
+          const b = 0.85 + colorShift * 0.4;
+          const cIdx = instIndex * 3;
+          instanceColors[cIdx] = r;
+          instanceColors[cIdx + 1] = g;
+          instanceColors[cIdx + 2] = b;
+
+          instancePhaseAttribute.array[instIndex] = rand() * Math.PI * 2;
 
           bladesThisFrame++;
         }
@@ -770,6 +906,8 @@
       // Partial update every frame
       grassMesh.instanceMatrix.needsUpdate = true;
       instancePhaseAttribute.needsUpdate = true;
+      instanceHeightAttribute.needsUpdate = true;
+      instanceColorAttribute.needsUpdate = true;
 
       // === Finished? ===
       if (rebuildInstanceIndex >= rebuildCells.length) {
@@ -780,11 +918,20 @@
           dummy.updateMatrix();
           grassMesh.setMatrixAt(i, dummy.matrix);
           instancePhaseAttribute.array[i] = 0;
+          instanceHeightAttribute.array[i] = 1.0;
+          const cIdx = i * 3;
+          instanceColors[cIdx] = 1.0;
+          instanceColors[cIdx + 1] = 1.0;
+          instanceColors[cIdx + 2] = 1.0;
         }
         grassMesh.instanceMatrix.needsUpdate = true;
         instancePhaseAttribute.needsUpdate = true;
+        instanceHeightAttribute.needsUpdate = true;
+        instanceColorAttribute.needsUpdate = true;
 
+        updateShadowCamera();
         isRebuildingGrass = false;
+        sunLight.shadow.needsUpdate = true;   // forces the new grass blades to cast shadows instantly
         rebuildCells = [];
         console.log(`🌿 Chunked rebuild COMPLETE — ${rebuildInstanceIndex * GRASS_PER_CELL} real blades placed`);
       }
@@ -1562,6 +1709,7 @@
       const surfaceY = getTerrainHeight(playerModel.position.x, playerModel.position.z);
       playerModel.position.y = surfaceY + 12;
       updateDynamicGrass();   // initial population
+      updateShadowCamera();   // initial shadow map
       lastGrassCenterX = playerModel.position.x;
       lastGrassCenterZ = playerModel.position.z;
 
@@ -1987,6 +2135,8 @@
         }
         w.mesh.geometry.attributes.position.needsUpdate = true;
       });
+
+      updateShadowCamera();   // ← this makes shadows follow you instantly
 
       // Grass wind
       if (grassMesh && grassMaterial.uniforms.time) {
