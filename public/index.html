@@ -526,6 +526,301 @@
     groundGeo.computeBoundingBox();
     groundGeo.computeBoundingSphere();
 
+    const terrainRaycaster = new THREE.Raycaster();
+
+    // ====================== DYNAMIC GRASS SYSTEM v2 (Clean + instancePhase fixed) ======================
+    const MAX_GRASS_INSTANCES = 112000;
+    const GRASS_RADIUS = 5000;
+    const CELL_SIZE = 81;
+    const GRASS_PER_CELL = 9;
+    const GRASS_REGEN_DISTANCE = 1000;
+    const WORLD_SEED = 133742069;
+
+    let grassMesh = null;
+    let lastGrassCenterX = 0;
+    let lastGrassCenterZ = 0;
+    let lastCenterCellX = 999999;
+    let lastCenterCellZ = 999999;
+    let terrainVersion = 0;   // we’ll increment this after any sculpt/undo
+    let lastTerrainVersion = -1;
+    let instancePhaseAttribute = null;
+
+    let isRebuildingGrass = false;
+    let rebuildCells = [];
+    let rebuildInstanceIndex = 0;
+    const BLADES_PER_FRAME = 5000;   // ← tune this (4000 = very safe, 8000+ = faster pop-in)
+
+    // Keep your createSeededRandom exactly as-is
+    function createSeededRandom(seed) {
+      return function () {
+        let t = seed += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    function createCrossedGrassBladeGeometry() {
+      const planeGeo = new THREE.PlaneGeometry(1.1, 5.8, 1, 7);
+
+      // Taper both blades (wider base, pointy tip)
+      const taper = (geo) => {
+        const pos = geo.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          const y = pos.getY(i);
+          const taperFactor = 1.0 - (y / 5.8) * 0.65;
+          pos.setX(i, pos.getX(i) * taperFactor);
+        }
+        pos.needsUpdate = true;
+      };
+      taper(planeGeo);
+
+      // Second blade rotated 90°
+      const plane2 = planeGeo.clone();
+      plane2.rotateY(Math.PI / 2);
+      taper(plane2); // taper again just in case
+
+      // Merge into one geometry
+      const crossedGeo = new THREE.BufferGeometry();
+      const vertices1 = planeGeo.attributes.position.array;
+      const vertices2 = plane2.attributes.position.array;
+
+      const mergedVertices = new Float32Array(vertices1.length + vertices2.length);
+      mergedVertices.set(vertices1);
+      mergedVertices.set(vertices2, vertices1.length);
+
+      const uv1 = planeGeo.attributes.uv.array;
+      const uv2 = plane2.attributes.uv.array;
+      const mergedUV = new Float32Array(uv1.length + uv2.length);
+      mergedUV.set(uv1);
+      mergedUV.set(uv2, uv1.length);
+
+      crossedGeo.setAttribute('position', new THREE.BufferAttribute(mergedVertices, 3));
+      crossedGeo.setAttribute('uv', new THREE.BufferAttribute(mergedUV, 2));
+
+      // Add indices for both planes
+      const indices1 = planeGeo.index.array;
+      const indices2 = plane2.index.array;
+      const mergedIndices = new Uint16Array(indices1.length + indices2.length);
+      mergedIndices.set(indices1);
+      for (let i = 0; i < indices2.length; i++) {
+        mergedIndices[indices1.length + i] = indices2[i] + (vertices1.length / 3);
+      }
+      crossedGeo.setIndex(new THREE.BufferAttribute(mergedIndices, 1));
+
+      return crossedGeo;
+    }
+
+    const grassBladeGeo = createCrossedGrassBladeGeometry();
+
+    const grassVertexShader = `
+  uniform float time;
+  attribute float instancePhase;
+  varying vec2 vUv;
+
+  void main() {
+    vUv = uv;
+
+    vec3 pos = position;
+
+    // Wind - only affects the top of the blade (uv.y = 0 at base, 1 at tip)
+    float wind = sin(time * 1.8 + instancePhase + pos.x * 1.5) * 1.1 * uv.y;
+    pos.x += wind;
+
+    // Gentle natural curve
+    pos.z += uv.y * 0.35;
+
+    // Apply instance matrix (position + rotation + scale)
+    vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(pos, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+
+    const grassFragmentShader = `
+  varying vec2 vUv;
+
+  void main() {
+    // Rich grass gradient
+    vec3 base = vec3(0.05, 0.38, 0.08);
+    vec3 tip  = vec3(0.55, 0.92, 0.25);
+    vec3 color = mix(base, tip, vUv.y);
+
+    // Subtle variation stripes
+    color += sin(vUv.y * 18.0) * 0.035;
+
+    // Simple directional lighting (matches your sunLight)
+    vec3 lightDir = normalize(vec3(0.6, 0.8, 0.3)); // approx sun direction
+    float lighting = max(0.4, dot(vec3(0.0, 1.0, 0.0), lightDir)); // fake normal up
+    color *= lighting * 1.25;
+
+    color = clamp(color, 0.0, 1.0);
+
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
+    const grassMaterial = new THREE.ShaderMaterial({
+      uniforms: { time: { value: 0 } },
+      vertexShader: grassVertexShader,
+      fragmentShader: grassFragmentShader,
+      side: THREE.DoubleSide
+    });
+
+    grassMesh = new THREE.InstancedMesh(grassBladeGeo, grassMaterial, MAX_GRASS_INSTANCES);
+    grassMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(grassMesh);
+
+    // Create phase attribute once (fixes wind + makes grass visible)
+    const phases = new Float32Array(MAX_GRASS_INSTANCES);
+    instancePhaseAttribute = new THREE.InstancedBufferAttribute(phases, 1);
+    grassMesh.geometry.setAttribute('instancePhase', instancePhaseAttribute);
+
+    // Hide everything initially
+    const dummy = new THREE.Object3D();
+    dummy.scale.set(0.001, 0.001, 0.001);
+    for (let i = 0; i < MAX_GRASS_INSTANCES; i++) {
+      dummy.updateMatrix();
+      grassMesh.setMatrixAt(i, dummy.matrix);
+    }
+    grassMesh.instanceMatrix.needsUpdate = true;
+
+    // ====================== CLEAN REBUILD GRASS ======================
+    function updateDynamicGrass() {
+      if (!playerModel || !grassMesh) return;
+
+      const px = playerModel.position.x;
+      const pz = playerModel.position.z;
+
+      const distMoved = Math.hypot(px - lastGrassCenterX, pz - lastGrassCenterZ);
+
+      // === ONLY rebuild when you've moved far enough (your 1000 value) ===
+      if (distMoved < GRASS_REGEN_DISTANCE && terrainVersion === lastTerrainVersion) {
+        return;
+      }
+
+      // Update center for next time
+      lastGrassCenterX = px;
+      lastGrassCenterZ = pz;
+      if (terrainVersion !== lastTerrainVersion) lastTerrainVersion = terrainVersion;
+
+      console.log(`🌿 Grass rebuild triggered — moved ${distMoved.toFixed(0)} units`);
+
+      // === Cell collection (still super cheap & accurate) ===
+      const maxOffset = Math.ceil(GRASS_RADIUS / CELL_SIZE) + 2;
+      rebuildCells = [];
+
+      for (let dx = -maxOffset; dx <= maxOffset; dx++) {
+        for (let dz = -maxOffset; dz <= maxOffset; dz++) {
+          const cx = Math.floor(px / CELL_SIZE) + dx;
+          const cz = Math.floor(pz / CELL_SIZE) + dz;
+          const cellCX = cx * CELL_SIZE + CELL_SIZE * 0.5;
+          const cellCZ = cz * CELL_SIZE + CELL_SIZE * 0.5;
+          const dist = Math.hypot(cellCX - px, cellCZ - pz);
+
+          if (dist <= GRASS_RADIUS + 80) {
+            rebuildCells.push({ cx, cz, dist });
+          }
+        }
+      }
+
+      rebuildCells.sort((a, b) => a.dist - b.dist);
+
+      rebuildInstanceIndex = 0;
+      isRebuildingGrass = true;
+
+      console.log(`🌿 Starting chunked rebuild (${rebuildCells.length} cells)`);
+    }
+    function processGrassChunk() {
+      if (!isRebuildingGrass || !grassMesh) return;
+
+      const d = new THREE.Object3D();
+      let bladesThisFrame = 0;
+
+      while (rebuildInstanceIndex < rebuildCells.length && bladesThisFrame < BLADES_PER_FRAME) {
+        const cell = rebuildCells[rebuildInstanceIndex];
+        const { cx, cz } = cell;
+        const cellCX = cx * CELL_SIZE + CELL_SIZE * 0.5;
+        const cellCZ = cz * CELL_SIZE + CELL_SIZE * 0.5;
+
+        const cellSeed = WORLD_SEED + cx * 7381923 + cz * 19349663;
+        const rand = createSeededRandom(cellSeed);
+
+        for (let k = 0; k < GRASS_PER_CELL && bladesThisFrame < BLADES_PER_FRAME; k++) {
+          const ox = (rand() - 0.5) * CELL_SIZE * 0.88;
+          const oz = (rand() - 0.5) * CELL_SIZE * 0.88;
+
+          const wx = cellCX + ox;
+          const wz = cellCZ + oz;
+          const y = getTerrainHeightFast(wx, wz) + 0.18;
+
+          d.position.set(wx, y, wz);
+          d.rotation.y = rand() * Math.PI * 2;
+          const h = 0.85 + rand() * 0.45;
+          d.scale.set(0.9 + rand() * 0.4, h, 1);
+
+          d.updateMatrix();
+          grassMesh.setMatrixAt(rebuildInstanceIndex * GRASS_PER_CELL + k, d.matrix); // note: we switched to cell-based indexing for simplicity
+          instancePhaseAttribute.array[rebuildInstanceIndex * GRASS_PER_CELL + k] = rand() * Math.PI * 2;
+
+          bladesThisFrame++;
+        }
+
+        rebuildInstanceIndex++;
+      }
+
+      // Partial update every frame
+      grassMesh.instanceMatrix.needsUpdate = true;
+      instancePhaseAttribute.needsUpdate = true;
+
+      // === Finished? ===
+      if (rebuildInstanceIndex >= rebuildCells.length) {
+        // Hide the rest of the slots
+        const dummy = new THREE.Object3D();
+        dummy.scale.set(0.001, 0.001, 0.001);
+        for (let i = rebuildCells.length * GRASS_PER_CELL; i < MAX_GRASS_INSTANCES; i++) {
+          dummy.updateMatrix();
+          grassMesh.setMatrixAt(i, dummy.matrix);
+          instancePhaseAttribute.array[i] = 0;
+        }
+        grassMesh.instanceMatrix.needsUpdate = true;
+        instancePhaseAttribute.needsUpdate = true;
+
+        isRebuildingGrass = false;
+        rebuildCells = [];
+        console.log(`🌿 Chunked rebuild COMPLETE — ${rebuildInstanceIndex * GRASS_PER_CELL} real blades placed`);
+      }
+    }
+    // ====================== END GRASS ======================
+
+    // ====================== FAST HEIGHT SAMPLER (prevents freeze) ======================
+    function getTerrainHeightFast(worldX, worldZ) {
+      const gridX = (worldX + WIDTH / 2) / (WIDTH / SEG_X);
+      const gridZ = (worldZ + DEPTH / 2) / (DEPTH / SEG_Z);
+
+      const x0 = Math.floor(gridX);
+      const z0 = Math.floor(gridZ);
+      const x1 = Math.min(x0 + 1, SEG_X);
+      const z1 = Math.min(z0 + 1, SEG_Z);
+
+      const fx = gridX - x0;
+      const fz = gridZ - z0;
+
+      const i00 = z0 * (SEG_X + 1) + x0;
+      const i10 = z0 * (SEG_X + 1) + x1;
+      const i01 = z1 * (SEG_X + 1) + x0;
+      const i11 = z1 * (SEG_X + 1) + x1;
+
+      const h00 = terrainHeights[i00] || 105;
+      const h10 = terrainHeights[i10] || 105;
+      const h01 = terrainHeights[i01] || 105;
+      const h11 = terrainHeights[i11] || 105;
+
+      // Bilinear interpolation
+      const h0 = h00 * (1 - fx) + h10 * fx;
+      const h1 = h01 * (1 - fx) + h11 * fx;
+      return h0 * (1 - fz) + h1 * fz;
+    }
+    // ====================== END FAST SAMPLER ======================
+
     function getTerrainHeight(worldX, worldZ) {
       // Normal terrain raycast
       terrainRaycaster.set(
@@ -656,6 +951,8 @@
         const ty = getTerrainHeight(t.group.position.x, t.group.position.z);
         t.group.position.y = ty;
       });
+      updateDynamicGrass();   // re-snap grass to new heights
+      terrainVersion++;
     }
 
     // ==================== END HEIGHTMAP ====================
@@ -765,7 +1062,6 @@
     let selectionBox = null;
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    const terrainRaycaster = new THREE.Raycaster(); // ← NEW for perfect ground collision
 
     function createTreeObject(id, x, z) {
       const group = new THREE.Group();
@@ -1159,6 +1455,8 @@
                 t.group.position.z,
               );
           });
+          updateDynamicGrass();
+          terrainVersion++;
           const py = getTerrainHeight(
             playerModel.position.x,
             playerModel.position.z,
@@ -1193,6 +1491,7 @@
           playerModel.position.z,
         );
         playerModel.position.y = py + 15;
+        updateDynamicGrass();
       });
       socket.on("waterBodyAdded", (water) => {
         createWaterMesh(water.id, water.points, water.level);
@@ -1262,8 +1561,12 @@
       // Snap to terrain
       const surfaceY = getTerrainHeight(playerModel.position.x, playerModel.position.z);
       playerModel.position.y = surfaceY + 12;
+      updateDynamicGrass();   // initial population
+      lastGrassCenterX = playerModel.position.x;
+      lastGrassCenterZ = playerModel.position.z;
 
       console.log(`📍 Restored position: ${playerModel.position.x.toFixed(1)}, ${playerModel.position.z.toFixed(1)}`);
+      console.log(`🌿 Dynamic grass system ready`);
 
       // === CRITICAL: Start multiplayer ===
       initSocket();
@@ -1685,6 +1988,17 @@
         w.mesh.geometry.attributes.position.needsUpdate = true;
       });
 
+      // Grass wind
+      if (grassMesh && grassMaterial.uniforms.time) {
+        grassMaterial.uniforms.time.value = performance.now() * 0.001;
+      }
+
+      // Regenerate local grass when player moves far
+      updateDynamicGrass();
+
+      // Grass chunked rebuild
+      if (isRebuildingGrass) processGrassChunk();
+
       renderer.render(scene, camera);
     }
 
@@ -1890,7 +2204,8 @@
           playerModel.position.z,
         );
         playerModel.position.y = py + 15;
-
+        updateDynamicGrass();
+        terrainVersion++;
         socket.emit("updateTerrain", Array.from(terrainHeights));
       });
       // Water tool button
