@@ -72,7 +72,20 @@ const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
-app.use(express.static("public"));
+// Serve frontend files conditionally
+if (process.env.NODE_ENV === "production") {
+  // In production (Railway), serve the Vite-built files from dist/
+  app.use(express.static(path.join(__dirname, 'dist')));
+
+  // Catch-all route for single-page app (handles refresh, direct URLs)
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  });
+} else {
+  // In development, do nothing here — Vite serves the frontend on port 5173
+  // You can leave this empty or comment out the old public folder if desired
+  // app.use(express.static("public"));  // ← optional: keep commented if public/ is empty
+}
 
 const players = new Map();
 

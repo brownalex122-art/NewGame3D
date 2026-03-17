@@ -1,0 +1,2112 @@
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js';
+import { io } from 'https://cdn.jsdelivr.net/npm/socket.io-client@4.7.5/+esm';
+
+console.log(
+    "🎮 Phase 2.5 FINAL - Chat memory removed • A/D turns camera with player • Mouse wheel zoom DISABLED while hovering chat (so you can scroll messages freely)",
+);
+
+// Scene & models (unchanged)
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x262C99, 0.00015);   // ← try 0.00005 to 0.00015
+scene.add(new THREE.AmbientLight(0x666666, 0.65));
+const sunLight = new THREE.DirectionalLight(0xffeecc, 1.1);
+// Add this once, right after const sunLight = new THREE.DirectionalLight...
+sunLight.target = new THREE.Object3D();
+scene.add(sunLight.target);
+sunLight.position.set(150, 150, 100);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width = 4096;
+sunLight.shadow.mapSize.height = 4096;
+sunLight.shadow.camera.near = 10;
+sunLight.shadow.camera.far = 2500;
+sunLight.shadow.bias = -0.0012;
+scene.add(sunLight);
+
+// ────────────────────────────────────────────────
+// SHADOW CAMERA 100% TIED TO PLAYER + GRASS REGEN (final fix)
+// ────────────────────────────────────────────────
+function updateShadowCamera() {
+    if (!playerModel || !sunLight) return;
+
+    const px = playerModel.position.x;
+    const pz = playerModel.position.z;
+    const py = playerModel.position.y;
+
+    // 1. Keep your beautiful angled sunlight
+    sunLight.position.set(px + 525, py + 1000, pz + 1550);
+
+    // 2. CRITICAL: Make the light ALWAYS point directly at the player
+    if (!sunLight.target) {
+        sunLight.target = new THREE.Object3D();
+        scene.add(sunLight.target);   // must be in the scene
+    }
+    sunLight.target.position.set(px + 1800, py + 500, pz - 400);  // slight height offset for better coverage
+    sunLight.target.updateMatrixWorld();
+
+    // 3. Symmetric frustum centered perfectly on the player
+    const radius = 1500;   // perfect sweet spot for your GRASS_RADIUS=5000
+
+    const cam = sunLight.shadow.camera;
+    cam.left = -radius;
+    cam.right = radius;
+    cam.top = radius;
+    cam.bottom = -radius;
+
+    cam.near = 150;
+    cam.far = 4800;
+
+    cam.updateProjectionMatrix();
+    sunLight.updateMatrixWorld();
+    sunLight.shadow.needsUpdate = true;
+}
+
+
+// ────────────────────────────────────────────────
+// Skybox - Classic Cubemap (6 faces)
+// ────────────────────────────────────────────────
+const skyTextureLoader = new THREE.CubeTextureLoader();
+
+const skyboxTexture = skyTextureLoader.load([
+    'textures/sky/px.png',  // right   (+X)
+    'textures/sky/nx.png',  // left    (-X)
+    'textures/sky/py.png',  // top     (+Y)
+    'textures/sky/ny.png',  // bottom  (-Y)
+    'textures/sky/pz.png',  // front   (+Z)
+    'textures/sky/nz.png'   // back    (-Z)
+]);
+
+// Optional: make it brighter / more vivid
+skyboxTexture.colorSpace = THREE.SRGBColorSpace;
+
+scene.background = skyboxTexture;
+
+// Optional: also use as environment map for slight reflections on water/trees later
+scene.environment = skyboxTexture;
+
+const camera = new THREE.PerspectiveCamera(
+    60,
+    window.innerWidth / window.innerHeight,
+    10, // ← was 0.1  (huge precision win)
+    90000,
+);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;   // beautiful soft shadows
+document.body.appendChild(renderer.domElement);
+
+// === FINAL POLISHED ROLLING HILLS - Smooth multi-directional (strong N/S + round hills) ===
+const SEG_X = 432;
+const SEG_Z = 264;
+const WIDTH = 57600;
+const DEPTH = 35200;
+
+let groundGeo = new THREE.PlaneGeometry(WIDTH, DEPTH, SEG_X, SEG_Z);
+const positions = groundGeo.attributes.position.array;
+
+let terrainHeights = new Float32Array(positions.length / 3);
+
+const vertsX = SEG_X + 1;
+
+for (let i = 0; i < terrainHeights.length; i++) {
+    const ix = i % vertsX;
+    const iz = Math.floor(i / vertsX);
+    const worldX = (ix - SEG_X / 2) * (WIDTH / SEG_X);
+    const worldZ = (iz - SEG_Z / 2) * (DEPTH / SEG_Z);
+
+    let height = 0;
+    let amp = 1;
+    let freq = 0.000085;
+
+    for (let o = 0; o < 6; o++) {
+        // sin*cos product (the magic from Maybe.txt that gives smooth rounded hills)
+        height +=
+            amp *
+            Math.sin(worldX * freq * 1.05) *
+            Math.cos(worldZ * freq * 0.95);
+        // Strong North-South boost on the big layers
+        if (o < 4) height += amp * 0.65 * Math.sin(worldZ * freq * 1.38);
+        amp *= 0.48;
+        freq *= 2.12;
+    }
+
+    terrainHeights[i] = height * 920 + 105;
+    positions[i * 3 + 2] = terrainHeights[i];
+}
+
+const minH = Math.min(...terrainHeights);
+const maxH = Math.max(...terrainHeights);
+console.log(
+    "✅ FINAL ROLLING HILLS LOADED - smooth natural terrain with strong N/S variation",
+);
+console.log(`Height range: ${minH.toFixed(1)} to ${maxH.toFixed(1)}`);
+
+const groundMat = new THREE.MeshPhongMaterial({
+    color: 0x00bb44,
+    shininess: 5,
+    specular: 0x222222,
+});
+
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Black wireframe (high contrast so you can see every bump)
+const wireMat = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.75,
+});
+const wireMesh = new THREE.Mesh(groundGeo, wireMat);
+wireMesh.rotation.x = -Math.PI / 2;
+scene.add(wireMesh);
+
+groundGeo.attributes.position.needsUpdate = true;
+groundGeo.computeVertexNormals();
+groundGeo.computeBoundingBox();
+groundGeo.computeBoundingSphere();
+
+const terrainRaycaster = new THREE.Raycaster();
+
+// ====================== DYNAMIC GRASS SYSTEM v2 (Clean + instancePhase fixed) ======================
+const MAX_GRASS_INSTANCES = 112000;
+const GRASS_RADIUS = 5000;
+const CELL_SIZE = 81;
+const GRASS_PER_CELL = 9;
+const GRASS_REGEN_DISTANCE = 1000;
+const WORLD_SEED = 133742069;
+
+let grassMesh = null;
+let lastGrassCenterX = 0;
+let lastGrassCenterZ = 0;
+let lastCenterCellX = 999999;
+let lastCenterCellZ = 999999;
+let terrainVersion = 0;   // we’ll increment this after any sculpt/undo
+let lastTerrainVersion = -1;
+let instancePhaseAttribute = null;
+
+let isRebuildingGrass = false;
+let rebuildCells = [];
+let rebuildInstanceIndex = 0;
+const BLADES_PER_FRAME = 5000;   // ← tune this (4000 = very safe, 8000+ = faster pop-in)
+const GRASS_BASE_LIFT = 2.9;
+
+// Keep your createSeededRandom exactly as-is
+function createSeededRandom(seed) {
+    return function () {
+        let t = seed += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+function createCrossedGrassBladeGeometry() {
+    const planeGeo = new THREE.PlaneGeometry(1.1, 5.8, 1, 7);
+
+    // Taper both blades (wider base, pointy tip)
+    const taper = (geo) => {
+        const pos = geo.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+            const y = pos.getY(i);
+            const taperFactor = 1.0 - (y / 5.8) * 0.65;
+            pos.setX(i, pos.getX(i) * taperFactor);
+        }
+        pos.needsUpdate = true;
+    };
+    taper(planeGeo);
+
+    // Second blade rotated 90°
+    const plane2 = planeGeo.clone();
+    plane2.rotateY(Math.PI / 2);
+    taper(plane2); // taper again just in case
+
+    // Merge into one geometry
+    const crossedGeo = new THREE.BufferGeometry();
+    const vertices1 = planeGeo.attributes.position.array;
+    const vertices2 = plane2.attributes.position.array;
+
+    const mergedVertices = new Float32Array(vertices1.length + vertices2.length);
+    mergedVertices.set(vertices1);
+    mergedVertices.set(vertices2, vertices1.length);
+
+    const uv1 = planeGeo.attributes.uv.array;
+    const uv2 = plane2.attributes.uv.array;
+    const mergedUV = new Float32Array(uv1.length + uv2.length);
+    mergedUV.set(uv1);
+    mergedUV.set(uv2, uv1.length);
+
+    crossedGeo.setAttribute('position', new THREE.BufferAttribute(mergedVertices, 3));
+    crossedGeo.setAttribute('uv', new THREE.BufferAttribute(mergedUV, 2));
+
+    // Add indices for both planes
+    const indices1 = planeGeo.index.array;
+    const indices2 = plane2.index.array;
+    const mergedIndices = new Uint16Array(indices1.length + indices2.length);
+    mergedIndices.set(indices1);
+    for (let i = 0; i < indices2.length; i++) {
+        mergedIndices[indices1.length + i] = indices2[i] + (vertices1.length / 3);
+    }
+    crossedGeo.setIndex(new THREE.BufferAttribute(mergedIndices, 1));
+
+    return crossedGeo;
+}
+
+const grassBladeGeo = createCrossedGrassBladeGeometry();
+
+const grassVertexShader = `
+  uniform float time;
+  attribute float instancePhase;
+  attribute float instanceHeight;
+  attribute vec3 instanceColor;
+
+  varying vec2 vUv;
+  varying vec3 vInstanceColor;
+
+  void main() {
+    vUv = uv;
+    vInstanceColor = instanceColor;
+
+    vec3 pos = position;
+
+    // === HEIGHT VARIATION (on top of your existing scale) ===
+    pos.y *= instanceHeight;
+    pos.y += (instanceHeight - 1.0) * 2.9;   // 2.9 = half blade height
+
+    // Wind - only affects the top of the blade (uv.y = 0 at base, 1 at tip)
+    float wind = sin(time * 1.8 + instancePhase + pos.x * 1.5) * 1.1 * uv.y * instanceHeight;
+    pos.x += wind;
+
+    // Gentle natural curve
+    pos.z += uv.y * 0.35;
+
+    // Apply instance matrix (position + rotation + scale)
+    vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(pos, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+
+const grassFragmentShader = `
+  varying vec2 vUv;
+  varying vec3 vInstanceColor;
+
+  void main() {
+    // Rich grass gradient + per-instance color tint
+    vec3 base = vec3(0.05, 0.38, 0.08) * vInstanceColor;
+    vec3 tip  = vec3(0.55, 0.92, 0.25) * vInstanceColor;
+    vec3 color = mix(base, tip, vUv.y);
+
+    // Subtle variation stripes
+    color += sin(vUv.y * 18.0) * 0.035;
+
+    // Simple directional lighting (matches your sunLight)
+    vec3 lightDir = normalize(vec3(0.6, 0.8, 0.3));
+    float lighting = max(0.4, dot(vec3(0.0, 1.0, 0.0), lightDir));
+    color *= lighting * 1.25;
+
+    color = clamp(color, 0.0, 1.0);
+
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
+const grassMaterial = new THREE.ShaderMaterial({
+    uniforms: { time: { value: 0 } },
+    vertexShader: grassVertexShader,
+    fragmentShader: grassFragmentShader,
+    side: THREE.DoubleSide
+});
+
+grassMesh = new THREE.InstancedMesh(grassBladeGeo, grassMaterial, MAX_GRASS_INSTANCES);
+grassMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(grassMesh);
+
+// === GRASS NOW CASTS SHADOWS (animated with wind + height variation) ===
+grassMesh.castShadow = true;
+grassMesh.receiveShadow = false;
+grassMesh.frustumCulled = false;   // ← critical for InstancedMesh spread over 10k+ units
+
+const grassDepthVertexShader = `
+      uniform float time;
+      attribute float instancePhase;
+      attribute float instanceHeight;
+      // position / uv / instanceMatrix / instanceColor are ALREADY injected by Three.js
+      // (that's why we got redefinition errors)
+
+      void main() {
+        vec3 pos = position;
+
+        // Same height scaling as your main shader
+        pos.y *= instanceHeight;
+        pos.y += (instanceHeight - 1.0) * 2.9;
+
+        // Wind also affects the shadow (looks alive!)
+        float wind = sin(time * 1.8 + instancePhase + pos.x * 1.5) * 0.85 * uv.y * instanceHeight;
+        pos.x += wind;
+
+        // Gentle curve (same as main)
+        pos.z += uv.y * 0.35;
+
+        vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(pos, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `;
+
+const grassDepthMaterial = new THREE.ShaderMaterial({
+    uniforms: grassMaterial.uniforms,   // shares the time uniform
+    vertexShader: grassDepthVertexShader,
+    fragmentShader: `void main() { gl_FragColor = vec4(0.0); }`,
+    side: THREE.DoubleSide
+});
+
+grassMesh.customDepthMaterial = grassDepthMaterial;
+
+// Create phase attribute once (fixes wind + makes grass visible)
+const phases = new Float32Array(MAX_GRASS_INSTANCES);
+instancePhaseAttribute = new THREE.InstancedBufferAttribute(phases, 1);
+grassMesh.geometry.setAttribute('instancePhase', instancePhaseAttribute);
+
+// === NEW: Per-instance height + color variation ===
+const instanceHeights = new Float32Array(MAX_GRASS_INSTANCES);
+const instanceColors = new Float32Array(MAX_GRASS_INSTANCES * 3);
+const instanceHeightAttribute = new THREE.InstancedBufferAttribute(instanceHeights, 1);
+const instanceColorAttribute = new THREE.InstancedBufferAttribute(instanceColors, 3);
+
+grassMesh.geometry.setAttribute('instanceHeight', instanceHeightAttribute);
+grassMesh.geometry.setAttribute('instanceColor', instanceColorAttribute);
+
+// Hide everything initially + set safe defaults for new attributes
+const dummy = new THREE.Object3D();
+dummy.scale.set(0.001, 0.001, 0.001);
+for (let i = 0; i < MAX_GRASS_INSTANCES; i++) {
+    dummy.updateMatrix();
+    grassMesh.setMatrixAt(i, dummy.matrix);
+
+    instanceHeightAttribute.array[i] = 1.0;
+    const cIdx = i * 3;
+    instanceColors[cIdx] = 1.0;
+    instanceColors[cIdx + 1] = 1.0;
+    instanceColors[cIdx + 2] = 1.0;
+}
+grassMesh.instanceMatrix.needsUpdate = true;
+instanceHeightAttribute.needsUpdate = true;
+instanceColorAttribute.needsUpdate = true;
+
+// ====================== CLEAN REBUILD GRASS ======================
+function updateDynamicGrass() {
+    if (!playerModel || !grassMesh) return;
+
+    const px = playerModel.position.x;
+    const pz = playerModel.position.z;
+
+    const distMoved = Math.hypot(px - lastGrassCenterX, pz - lastGrassCenterZ);
+
+    // === ONLY rebuild when you've moved far enough (your 1000 value) ===
+    if (distMoved < GRASS_REGEN_DISTANCE && terrainVersion === lastTerrainVersion) {
+        return;
+    }
+
+    // Update center for next time
+    lastGrassCenterX = px;
+    lastGrassCenterZ = pz;
+    updateShadowCamera();   // ← ADD THIS LINE (forces frustum to match new grass instantly)
+    if (terrainVersion !== lastTerrainVersion) lastTerrainVersion = terrainVersion;
+
+    console.log(`🌿 Grass rebuild triggered — moved ${distMoved.toFixed(0)} units`);
+
+    // === Cell collection (still super cheap & accurate) ===
+    const maxOffset = Math.ceil(GRASS_RADIUS / CELL_SIZE) + 2;
+    rebuildCells = [];
+
+    for (let dx = -maxOffset; dx <= maxOffset; dx++) {
+        for (let dz = -maxOffset; dz <= maxOffset; dz++) {
+            const cx = Math.floor(px / CELL_SIZE) + dx;
+            const cz = Math.floor(pz / CELL_SIZE) + dz;
+            const cellCX = cx * CELL_SIZE + CELL_SIZE * 0.5;
+            const cellCZ = cz * CELL_SIZE + CELL_SIZE * 0.5;
+            const dist = Math.hypot(cellCX - px, cellCZ - pz);
+
+            if (dist <= GRASS_RADIUS + 80) {
+                rebuildCells.push({ cx, cz, dist });
+            }
+        }
+    }
+
+    rebuildCells.sort((a, b) => a.dist - b.dist);
+
+    rebuildInstanceIndex = 0;
+    isRebuildingGrass = true;
+
+    console.log(`🌿 Starting chunked rebuild (${rebuildCells.length} cells)`);
+}
+function processGrassChunk() {
+    if (!isRebuildingGrass || !grassMesh) return;
+
+    const d = new THREE.Object3D();
+    let bladesThisFrame = 0;
+
+    while (rebuildInstanceIndex < rebuildCells.length && bladesThisFrame < BLADES_PER_FRAME) {
+        const cell = rebuildCells[rebuildInstanceIndex];
+        const { cx, cz } = cell;
+        const cellCX = cx * CELL_SIZE + CELL_SIZE * 0.5;
+        const cellCZ = cz * CELL_SIZE + CELL_SIZE * 0.5;
+
+        const cellSeed = WORLD_SEED + cx * 7381923 + cz * 19349663;
+        const rand = createSeededRandom(cellSeed);
+
+        for (let k = 0; k < GRASS_PER_CELL && bladesThisFrame < BLADES_PER_FRAME; k++) {
+            const ox = (rand() - 0.5) * CELL_SIZE * 0.88;
+            const oz = (rand() - 0.5) * CELL_SIZE * 0.88;
+
+            const wx = cellCX + ox;
+            const wz = cellCZ + oz;
+            const y = getTerrainHeightFast(wx, wz) + GRASS_BASE_LIFT;
+
+            d.position.set(wx, y, wz);
+            d.rotation.y = rand() * Math.PI * 2;
+            // Base scale (your original) + extra height multiplier for natural variety
+            const baseH = 0.85 + rand() * 0.45;
+            const heightVar = 0.78 + rand() * 0.68;   // 0.78× → 1.46× extra height
+            d.scale.set(0.9 + rand() * 0.4, baseH, 1);
+
+            d.updateMatrix();
+            grassMesh.setMatrixAt(rebuildInstanceIndex * GRASS_PER_CELL + k, d.matrix);
+
+            const instIndex = rebuildInstanceIndex * GRASS_PER_CELL + k;
+            instanceHeightAttribute.array[instIndex] = heightVar;
+
+            // Per-blade color tint (natural green → yellowish/dark variation)
+            const colorShift = (rand() - 0.5) * 2.22;
+            const r = 0.94 + colorShift * 0.6;
+            const g = 0.97 + colorShift * 0.3;
+            const b = 0.85 + colorShift * 0.4;
+            const cIdx = instIndex * 3;
+            instanceColors[cIdx] = r;
+            instanceColors[cIdx + 1] = g;
+            instanceColors[cIdx + 2] = b;
+
+            instancePhaseAttribute.array[instIndex] = rand() * Math.PI * 2;
+
+            bladesThisFrame++;
+        }
+
+        rebuildInstanceIndex++;
+    }
+
+    // Partial update every frame
+    grassMesh.instanceMatrix.needsUpdate = true;
+    instancePhaseAttribute.needsUpdate = true;
+    instanceHeightAttribute.needsUpdate = true;
+    instanceColorAttribute.needsUpdate = true;
+
+    // === Finished? ===
+    if (rebuildInstanceIndex >= rebuildCells.length) {
+        // Hide the rest of the slots
+        const dummy = new THREE.Object3D();
+        dummy.scale.set(0.001, 0.001, 0.001);
+        for (let i = rebuildCells.length * GRASS_PER_CELL; i < MAX_GRASS_INSTANCES; i++) {
+            dummy.updateMatrix();
+            grassMesh.setMatrixAt(i, dummy.matrix);
+            instancePhaseAttribute.array[i] = 0;
+            instanceHeightAttribute.array[i] = 1.0;
+            const cIdx = i * 3;
+            instanceColors[cIdx] = 1.0;
+            instanceColors[cIdx + 1] = 1.0;
+            instanceColors[cIdx + 2] = 1.0;
+        }
+        grassMesh.instanceMatrix.needsUpdate = true;
+        instancePhaseAttribute.needsUpdate = true;
+        instanceHeightAttribute.needsUpdate = true;
+        instanceColorAttribute.needsUpdate = true;
+
+        updateShadowCamera();
+        isRebuildingGrass = false;
+        sunLight.shadow.needsUpdate = true;   // forces the new grass blades to cast shadows instantly
+        rebuildCells = [];
+        console.log(`🌿 Chunked rebuild COMPLETE — ${rebuildInstanceIndex * GRASS_PER_CELL} real blades placed`);
+    }
+}
+// ====================== END GRASS ======================
+
+// ====================== FAST HEIGHT SAMPLER (prevents freeze) ======================
+function getTerrainHeightFast(worldX, worldZ) {
+    const gridX = (worldX + WIDTH / 2) / (WIDTH / SEG_X);
+    const gridZ = (worldZ + DEPTH / 2) / (DEPTH / SEG_Z);
+
+    const x0 = Math.floor(gridX);
+    const z0 = Math.floor(gridZ);
+    const x1 = Math.min(x0 + 1, SEG_X);
+    const z1 = Math.min(z0 + 1, SEG_Z);
+
+    const fx = gridX - x0;
+    const fz = gridZ - z0;
+
+    const i00 = z0 * (SEG_X + 1) + x0;
+    const i10 = z0 * (SEG_X + 1) + x1;
+    const i01 = z1 * (SEG_X + 1) + x0;
+    const i11 = z1 * (SEG_X + 1) + x1;
+
+    const h00 = terrainHeights[i00] || 105;
+    const h10 = terrainHeights[i10] || 105;
+    const h01 = terrainHeights[i01] || 105;
+    const h11 = terrainHeights[i11] || 105;
+
+    // Bilinear interpolation
+    const h0 = h00 * (1 - fx) + h10 * fx;
+    const h1 = h01 * (1 - fx) + h11 * fx;
+    return h0 * (1 - fz) + h1 * fz;
+}
+// ====================== END FAST SAMPLER ======================
+
+function getTerrainHeight(worldX, worldZ) {
+    // Normal terrain raycast
+    terrainRaycaster.set(
+        new THREE.Vector3(worldX, 20000, worldZ),
+        new THREE.Vector3(0, -1, 0),
+    );
+    const intersects = terrainRaycaster.intersectObject(ground);
+    if (intersects.length > 0) {
+        return intersects[0].point.y;
+    }
+    return 105;
+}
+
+async function loadPlayerModel(race = "Human", gender = "Male") {
+    playerModel = await createCharacterModel(race, gender);
+    scene.add(playerModel);
+    console.log(`✅ Local ${race} model loaded`);
+}
+
+async function createCharacterModel(race = "Human", gender = "Male") {
+    return new Promise((resolve) => {
+        const key = `${race}-${gender}`;
+        const config = raceModels[key] || raceModels.Bird;
+
+        const loader = new GLTFLoader();
+        loader.load(config.path, (gltf) => {
+            const visualModel = gltf.scene;
+            visualModel.scale.set(config.scale, config.scale, config.scale);
+            visualModel.rotation.y = Math.PI / 2;   // ← your confirmed working rotation
+
+            const container = new THREE.Group();
+            container.add(visualModel);
+
+            // Bonus: animation support for other players too
+            if (gltf.animations && gltf.animations.length > 0) {
+                const mixer = new THREE.AnimationMixer(container);
+                mixer.clipAction(gltf.animations[0]).play();
+                container.userData.mixer = mixer;
+            }
+
+            resolve(container);
+        }, undefined, (err) => {
+            console.warn("Model load failed for other player — using fallback");
+            const fallback = new THREE.Mesh(
+                new THREE.CylinderGeometry(8, 8, 30, 16),
+                new THREE.MeshPhongMaterial({ color: raceColors[race] || 0x00ff88 })
+            );
+            resolve(fallback);
+        });
+    });
+}
+
+function createFallbackPlayer() {
+    playerModel = new THREE.Mesh(
+        new THREE.CylinderGeometry(8, 8, 30, 16),
+        new THREE.MeshPhongMaterial({ color: 0x00ff88 })
+    );
+    playerModel.position.y = 15;
+    scene.add(playerModel);
+    console.log("🛠️ Using temporary cylinder (bird.glb failed to load)");
+}
+
+function sculptAtMouse(e) {
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObject(ground);
+    if (intersects.length === 0) return;
+
+    const point = intersects[0].point;
+    const positions = groundGeo.attributes.position.array;
+    const vertsX = SEG_X + 1;
+
+    for (let i = 0; i < terrainHeights.length; i++) {
+        const ix = i % vertsX;
+        const iz = Math.floor(i / vertsX);
+        const worldX = (ix - SEG_X / 2) * (WIDTH / SEG_X);
+        const worldZ = (iz - SEG_Z / 2) * (DEPTH / SEG_Z);
+
+        const dist = Math.sqrt(
+            Math.pow(worldX - point.x, 2) + Math.pow(worldZ - point.z, 2),
+        );
+        if (dist > brushSize * 60) continue; // scaled to world units
+
+        const falloff = Math.max(0, 1 - dist / (brushSize * 60));
+        let change = brushStrength * falloff * 4;
+
+        if (sculptMode === "raise") {
+            terrainHeights[i] += change;
+        } else if (sculptMode === "lower") {
+            terrainHeights[i] -= change;
+        } else if (sculptMode === "flatten") {
+            terrainHeights[i] = lerp(terrainHeights[i], point.y, 0.3);
+        } else if (sculptMode === "smooth") {
+            // simple average of 4 neighbors
+            let avg = terrainHeights[i];
+            let count = 1;
+            if (i % vertsX !== 0) {
+                avg += terrainHeights[i - 1];
+                count++;
+            }
+            if (i % vertsX !== vertsX - 1) {
+                avg += terrainHeights[i + 1];
+                count++;
+            }
+            if (i >= vertsX) {
+                avg += terrainHeights[i - vertsX];
+                count++;
+            }
+            if (i < terrainHeights.length - vertsX) {
+                avg += terrainHeights[i + vertsX];
+                count++;
+            }
+            terrainHeights[i] = avg / count;
+        }
+    }
+
+    // Apply to mesh
+    for (let i = 0; i < terrainHeights.length; i++) {
+        positions[i * 3 + 2] = terrainHeights[i];
+    }
+    groundGeo.attributes.position.needsUpdate = true;
+    groundGeo.computeVertexNormals();
+
+    // Live tree snapping
+    trees.forEach((t) => {
+        const ty = getTerrainHeight(t.group.position.x, t.group.position.z);
+        t.group.position.y = ty;
+    });
+    updateDynamicGrass();   // re-snap grass to new heights
+    terrainVersion++;
+}
+
+// ==================== END HEIGHTMAP ====================
+
+let playerModel = null;
+let playerMixer = null;   // for bird animations (if any)
+
+let gameActive = false;
+let currentCharacter = null;
+let currentAccount = "";
+const STORAGE_PREFIX = "miniAzeroth_";
+
+const raceColors = {
+    Human: 0xffddaa,
+    Orc: 0x77ff77,
+    Forsaken: 0x99bbff,
+    "Night Elf": 0x88ffdd,
+};
+const genderHeadColors = { Male: 0x4488ff, Female: 0xff88cc };
+const raceSpawns = {
+    Human: { x: 80, z: 120 },
+    Orc: { x: -180, z: -60 },
+    Forsaken: { x: 220, z: -180 },
+    "Night Elf": { x: -120, z: 200 },
+};
+
+// === RACE + GENDER → MODEL MAPPING (fully future-proof) ===
+const raceModels = {
+    "Human-Male": { path: '/models/character/bird-male.glb', scale: 25 },
+    "Human-Female": { path: '/models/character/bird-female.glb', scale: 25 },
+    "Orc-Male": { path: '/models/character/bird-male.glb', scale: 50 },
+    "Orc-Female": { path: '/models/character/bird-female.glb', scale: 50 },
+    "Forsaken-Male": { path: '/models/character/bird-male.glb', scale: 75 },
+    "Forsaken-Female": { path: '/models/character/bird-female.glb', scale: 75 },
+    "Night Elf-Male": { path: '/models/character/bird-male.glb', scale: 100 },
+    "Night Elf-Female": { path: '/models/character/bird-female.glb', scale: 100 },
+    Bird: { path: '/models/character/bird-male.glb', scale: 25 }
+};
+
+let socket = null;
+let otherPlayers = {};
+let localNameTag = null;
+let lastUpdateTime = 0;
+let lastMovementTime = Date.now();
+let isHoveringChat = false; // NEW: prevents camera zoom when mouse is over chat
+// ==================== LEVEL EDITOR ====================
+let editorMode = false;
+let trees = []; // {id, group}
+let selectedId = null;
+// ==================== TERRAIN SCULPTING (Phase 2) ====================
+let sculptMode = "null"; // raise, lower, flatten, smooth
+let brushSize = 25;
+let brushStrength = 2.5;
+const undoStack = []; // last 10 terrain states
+const MAX_UNDO = 10;
+let isSculpting = false;
+// ==================== WATER BODIES (Phase 3 - Polygon drawing) ====================
+let waterMode = false;
+let currentWaterPoints = []; // temporary points while drawing
+let waterPreviewLine = null;
+let waters = []; // {id, mesh, level}
+let selectedWaterId = null;
+
+function isTerrainSculptMode() {
+    return sculptMode === "raise" ||
+        sculptMode === "lower" ||
+        sculptMode === "flatten" ||
+        sculptMode === "smooth";
+}
+
+function selectWater(waterId) {
+    selectedWaterId = waterId;
+    selectedId = null;
+    deselect();
+
+    const water = waters.find((w) => w.id === waterId);
+    if (!water) return;
+
+    if (water.mesh) {
+        addSelectionBox();
+        selectionBox.setFromObject(water.mesh);
+        selectionBox.visible = true;
+    }
+
+    // Dynamic range: ±300 around current level (centered!)
+    const currentLevel = water.level + 12; // display level (matches what you see)
+    const slider = document.getElementById("waterLevelSlider");
+    slider.min = Math.floor(currentLevel - 300);
+    slider.max = Math.floor(currentLevel + 300);
+    slider.value = Math.floor(currentLevel);
+
+    document.getElementById("waterLevelContainer").style.display = "block";
+    document.getElementById("waterLevelValue").textContent =
+        currentLevel.toFixed(0);
+}
+
+function deselectWater() {
+    selectedWaterId = null;
+    if (selectionBox) selectionBox.visible = false;
+    document.getElementById("waterLevelContainer").style.display = "none";
+}
+
+function saveUndoState() {
+    undoStack.push(new Float32Array(terrainHeights));
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+}
+let selectionBox = null;
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+function createTreeObject(id, x, z) {
+    const group = new THREE.Group();
+    group.userData.id = id;
+
+    const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(6, 8, 30, 8),
+        new THREE.MeshPhongMaterial({ color: 0x8b4513 }),
+    );
+    trunk.position.y = 15;
+    group.add(trunk);
+
+    const foliage = new THREE.Mesh(
+        new THREE.ConeGeometry(25, 50, 8),
+        new THREE.MeshPhongMaterial({ color: 0x00ff88 }),
+    );
+    foliage.position.y = 48;
+    group.add(foliage);
+
+    group.position.set(x, 0, z);
+    const terrainY = getTerrainHeight(x, z);
+    group.position.y = terrainY;
+
+    scene.add(group);
+    trees.push({ id, group });
+    return group;
+}
+
+function addSelectionBox() {
+    if (!selectionBox) {
+        selectionBox = new THREE.BoxHelper(undefined, 0xffff00);
+        selectionBox.material.linewidth = 4;
+        scene.add(selectionBox);
+    }
+}
+
+function selectTree(treeId) {
+    selectedId = treeId;
+    const tree = trees.find((t) => t.id === treeId);
+    if (tree && tree.group) {
+        addSelectionBox();
+        selectionBox.setFromObject(tree.group);
+        selectionBox.visible = true; // ← THIS WAS THE MISSING LINE
+    }
+}
+
+function deselect() {
+    selectedId = null;
+    if (selectionBox) selectionBox.visible = false;
+}
+
+// Create trees from world data
+function loadWorldTrees(data) {
+    // Clear old trees
+    trees.forEach((t) => scene.remove(t.group));
+    trees = [];
+
+    data.trees.forEach((tree) => {
+        createTreeObject(tree.id, tree.x, tree.z);
+    });
+}
+function loadWorldWater(data) {
+    // Clear old water
+    waters.forEach((w) => scene.remove(w.mesh));
+    waters = [];
+
+    data.waterBodies.forEach((water) => {
+        createWaterMesh(water.id, water.points, water.level);
+    });
+}
+
+function createWaterMesh(id, points, level) {
+    if (points.length < 3) return;
+
+    console.log(`💧 Creating water ${id} at level ${level.toFixed(1)}`);
+
+    // === CENTER THE POLYGON (fixes the "invisible" bug) ===
+    let sumX = 0,
+        sumZ = 0;
+    points.forEach((p) => {
+        sumX += p.x;
+        sumZ += p.z;
+    });
+    const centerX = sumX / points.length;
+    const centerZ = sumZ / points.length;
+
+    const shape = new THREE.Shape();
+    shape.moveTo(points[0].x - centerX, points[0].z - centerZ);
+    for (let i = 1; i < points.length; i++) {
+        shape.lineTo(points[i].x - centerX, points[i].z - centerZ);
+    }
+    shape.closePath();
+
+    const geometry = new THREE.ShapeGeometry(shape);
+    const material = new THREE.MeshPhongMaterial({
+        color: 0x00ccff, // bright cyan
+        transparent: true,
+        opacity: 0.92,
+        shininess: 50,
+        side: THREE.DoubleSide,
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(centerX, level - 12, centerZ); // lowered 12 units so it sinks nicely into depressions
+
+    // Gentle ripple animation data
+    mesh.userData = {
+        id,
+        originalVertices: geometry.attributes.position.array.slice(),
+        timeOffset: Math.random() * 10,
+    };
+
+    scene.add(mesh);
+    waters.push({ id, mesh, level: level - 12 });
+    console.log(
+        `✅ Water mesh ${id} added at ${centerX.toFixed(0)}, ${level - 12}`,
+    );
+    return mesh;
+}
+function updateWaterPreview() {
+    if (waterPreviewLine) {
+        scene.remove(waterPreviewLine);
+        waterPreviewLine = null;
+    }
+    if (currentWaterPoints.length < 2) return;
+
+    // Preview now floats slightly above the actual hills
+    const points3d = currentWaterPoints.map((p) => {
+        const y = getTerrainHeight(p.x, p.z) + 4;
+        return new THREE.Vector3(p.x, y, p.z);
+    });
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(points3d);
+    const material = new THREE.LineBasicMaterial({
+        color: 0x00ffff,
+        linewidth: 8,
+    });
+    waterPreviewLine = new THREE.Line(geometry, material);
+    scene.add(waterPreviewLine);
+}
+
+function isPointInPolygon(x, z, points) {
+    let inside = false;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const xi = points[i].x,
+            zi = points[i].z;
+        const xj = points[j].x,
+            zj = points[j].z;
+        const intersect =
+            zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi;
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+// ==================== END LEVEL EDITOR ====================
+const UPDATE_RATE = 45;
+const AFK_TIMEOUT = 45000;
+const FADE_START = 80;
+const HIDE_DISTANCE = 250;
+
+function lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+function getCardinalDirection(rotY) {
+    let angle = ((((rotY * 180) / Math.PI) % 360) + 360) % 360;
+    if (angle < 45 || angle >= 315) return "North";
+    if (angle < 135) return "West";
+    if (angle < 225) return "South";
+    return "East";
+}
+
+function createNameTag(name, level, isLocal = false) {
+    const label = document.createElement("div");
+    label.style.position = "absolute";
+    label.style.background = "rgba(0,0,0,0.85)";
+    label.style.border = "2px solid #0f0";
+    label.style.color = "#00ff88";
+    label.style.fontSize = "14px";
+    label.style.padding = "4px 8px";
+    label.style.borderRadius = "4px";
+    label.style.whiteSpace = "nowrap";
+    label.style.pointerEvents = isLocal ? "auto" : "none";
+    label.style.cursor = isLocal ? "pointer" : "default";
+    label.style.transition = "opacity 0.3s";
+    label.innerHTML = `<div>${name} <small>Lv${level}</small></div><div style="height:6px;background:#222;width:90px;margin:3px auto 0;border:1px solid #0f0;"><div class="healthBar" style="height:100%;width:100%;background:#0f0;"></div></div>`;
+    if (isLocal) label.onclick = () => showNameCustomPanel();
+    document.getElementById("nameTagsContainer").appendChild(label);
+    return label;
+}
+
+function showNameCustomPanel() {
+    document.getElementById("nameCustomPanel").style.display = "block";
+    document.getElementById("nameColorPicker").value =
+        currentCharacter.nameColor || "#00ff88";
+}
+
+function saveNameColor() {
+    const newColor = document.getElementById("nameColorPicker").value;
+    currentCharacter.nameColor = newColor;
+    saveCharacter();
+    if (localNameTag) localNameTag.style.color = newColor;
+    if (socket) socket.emit("updateNameColor", newColor);
+    hideNameCustomPanel();
+}
+
+function hideNameCustomPanel() {
+    document.getElementById("nameCustomPanel").style.display = "none";
+}
+
+function updateNameTags() {
+    const now = Date.now();
+    const isAFK = now - lastMovementTime > AFK_TIMEOUT;
+
+    Object.values(otherPlayers).forEach((p) => {
+        if (!p.model || !p.label) return;   // ← FIXED (was p.body)
+
+        const dist = playerModel.position.distanceTo(p.model.position);
+        if (dist > HIDE_DISTANCE) {
+            p.label.style.display = "none";
+            return;
+        }
+        p.label.style.display = "block";
+
+        const vec = p.model.position.clone();
+        vec.y += 55;
+        vec.project(camera);
+        const x = (vec.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-vec.y * 0.5 + 0.5) * window.innerHeight;
+
+        p.label.style.left = `${x - p.label.offsetWidth / 2}px`;
+        p.label.style.top = `${y - 10}px`;
+
+        const opacity = Math.max(
+            0.25,
+            1 - (dist - FADE_START) / (HIDE_DISTANCE - FADE_START),
+        );
+        p.label.style.opacity = opacity;
+
+        const afkText = p.isAFK ? ' <span style="color:#ff0">(AFK)</span>' : "";
+        p.label.querySelector("div").innerHTML = `${p.name} <small>Lv${p.level}</small>${afkText}`;
+        p.label.style.color = p.nameColor || "#00ff88";
+    });
+
+    if (localNameTag) {
+        const vec = playerModel.position.clone();
+        vec.y += 48;
+        vec.project(camera);
+        const x = (vec.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-vec.y * 0.5 + 0.5) * window.innerHeight;
+
+        localNameTag.style.left = `${x - localNameTag.offsetWidth / 2}px`;
+        localNameTag.style.top = `${y - 10}px`;
+        localNameTag.style.display = "block";
+        localNameTag.style.opacity = 1;
+
+        const afkText = isAFK ? ' <span style="color:#ff0">(AFK)</span>' : "";
+        localNameTag.querySelector("div").innerHTML =
+            `${currentCharacter.name} <small>Lv${currentCharacter.level}</small>${afkText}`;
+        localNameTag.style.color = currentCharacter.nameColor || "#00ff88";
+    }
+}
+
+function updateCoordsDisplay() {
+    if (!gameActive || !playerModel) return;
+    document.getElementById("posX").textContent =
+        playerModel.position.x.toFixed(1);
+    document.getElementById("posY").textContent =
+        playerModel.position.y.toFixed(1);
+    document.getElementById("posZ").textContent =
+        playerModel.position.z.toFixed(1);
+    document.getElementById("facing").textContent = getCardinalDirection(
+        playerModel.rotation.y,
+    );
+}
+
+async function createOtherPlayerModel(data) {
+    if (otherPlayers[data.id]) return;
+
+    const model = await createCharacterModel(data.race, data.gender);
+    model.position.set(data.x || 0, data.y || 15, data.z || 0);
+    model.rotation.y = data.rot || 0;
+    scene.add(model);
+
+    const label = createNameTag(data.name, data.level, false);
+
+    otherPlayers[data.id] = {
+        model,   // ← now the real model
+        label,
+        targetX: data.x || 0,
+        targetY: data.y || 15,
+        targetZ: data.z || 0,
+        targetRot: data.rot || 0,
+        nameColor: data.nameColor || "#00ff88",
+        isAFK: data.isAFK || false,
+        name: data.name,
+        level: data.level,
+    };
+}
+
+function removeOtherPlayer(id) {
+    const p = otherPlayers[id];
+    if (p) {
+        scene.remove(p.model);
+        if (p.label && p.label.parentNode)
+            p.label.parentNode.removeChild(p.label);
+        delete otherPlayers[id];
+    }
+}
+
+function initSocket() {
+    if (socket) socket.disconnect();
+    socket = io();
+    socket.on("connect", () => {
+        socket.emit("joinGame", {
+            name: currentCharacter.name,
+            race: currentCharacter.race,
+            gender: currentCharacter.gender,
+            level: currentCharacter.level,
+            x: playerModel.position.x,
+            y: playerModel.position.y,
+            z: playerModel.position.z,
+            rot: playerModel.rotation.y,
+            nameColor: currentCharacter.nameColor || "#00ff88",
+        });
+    });
+    socket.on("existingPlayers", (list) => {
+        list.forEach((data) => createOtherPlayerModel(data));
+    });
+    socket.on("newPlayer", (data) => createOtherPlayerModel(data));
+    socket.on("playerMoved", (data) => {
+        const p = otherPlayers[data.id];
+        if (p) {
+            p.targetX = data.x;
+            p.targetY = data.y;
+            p.targetZ = data.z;
+            p.targetRot = data.rot;
+            if (data.isAFK !== undefined) p.isAFK = data.isAFK;
+        }
+    });
+    socket.on("nameColorUpdated", (data) => {
+        const p = otherPlayers[data.id];
+        if (p) p.nameColor = data.nameColor;
+    });
+    socket.on("playerLeft", (id) => removeOtherPlayer(id));
+    socket.on("chatMessage", (data) => {
+        if (data.name !== currentCharacter.name)
+            addChatMessage(data.name, data.message);
+    });
+
+    // Tree listeners
+    socket.on("treeAdded", (tree) => {
+        createTreeObject(tree.id, tree.x, tree.z);
+    });
+    socket.on("treeRemoved", (id) => {
+        const index = trees.findIndex((t) => t.id === id);
+        if (index !== -1) {
+            scene.remove(trees[index].group);
+            trees.splice(index, 1);
+        }
+        if (selectedId === id) deselect();
+    });
+
+    // === WORLD SYNC - Trees + Saved Terrain + Water Bodies (now persistent!) ===
+    socket.on("worldData", (zoneData) => {
+        console.log("🌍 Received world data from server");
+        if (zoneData.trees) loadWorldTrees(zoneData);
+
+        // NEW: Load saved terrain from world.json so sculpting survives refresh!
+        if (
+            zoneData.terrain &&
+            zoneData.terrain.length === terrainHeights.length
+        ) {
+            terrainHeights.set(zoneData.terrain);
+
+            const positions = groundGeo.attributes.position.array;
+            for (let i = 0; i < terrainHeights.length; i++) {
+                positions[i * 3 + 2] = terrainHeights[i];
+            }
+            groundGeo.attributes.position.needsUpdate = true;
+            groundGeo.computeVertexNormals();
+
+            console.log("✅ Loaded saved terrain from world.json");
+
+            // Snap trees & player to the loaded terrain
+            trees.forEach((t) => {
+                if (t.group)
+                    t.group.position.y = getTerrainHeight(
+                        t.group.position.x,
+                        t.group.position.z,
+                    );
+            });
+            updateDynamicGrass();
+            terrainVersion++;
+            const py = getTerrainHeight(
+                playerModel.position.x,
+                playerModel.position.z,
+            );
+            playerModel.position.y = py + 12;
+        }
+
+        // NEW: Load water bodies from world.json
+        if (zoneData.waterBodies) loadWorldWater(zoneData);
+    });
+    socket.on("terrainUpdated", (newHeights) => {
+        console.log("🌍 Terrain updated by another player");
+        terrainHeights.set(newHeights);
+
+        // Apply to mesh
+        const positions = groundGeo.attributes.position.array;
+        for (let i = 0; i < terrainHeights.length; i++) {
+            positions[i * 3 + 2] = terrainHeights[i];
+        }
+        groundGeo.attributes.position.needsUpdate = true;
+        groundGeo.computeVertexNormals();
+
+        // Snap ALL trees to new terrain
+        trees.forEach((t) => {
+            const ty = getTerrainHeight(t.group.position.x, t.group.position.z);
+            t.group.position.y = ty;
+        });
+
+        // Snap local player too
+        const py = getTerrainHeight(
+            playerModel.position.x,
+            playerModel.position.z,
+        );
+        playerModel.position.y = py + 15;
+        updateDynamicGrass();
+    });
+    socket.on("waterBodyAdded", (water) => {
+        createWaterMesh(water.id, water.points, water.level);
+    });
+
+    socket.on("waterBodyRemoved", (id) => {
+        const index = waters.findIndex((w) => w.id === id);
+        if (index !== -1) {
+            scene.remove(waters[index].mesh);
+            waters.splice(index, 1);
+        }
+        if (selectedWaterId === id) selectedWaterId = null;
+    });
+
+    socket.on("waterLevelUpdated", (data) => {
+        const w = waters.find((w) => w.id === data.id);
+        if (w) {
+            w.mesh.position.y = data.level;
+            w.level = data.level;
+        }
+    });
+}
+
+function addChatMessage(name, msg) {
+    const log = document.getElementById("chatMessages");
+    const entry = document.createElement("div");
+    entry.innerHTML = `<b>${name}:</b> ${msg}`;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+
+    if (log.children.length > 100) log.removeChild(log.children[0]);
+}
+
+async function startGame(name) {
+    document.getElementById("charListScreen").style.display = "none";
+    document.getElementById("hud").style.display = "block";
+    document.getElementById("instructions").style.display = "block";
+    document.getElementById("chatContainer").style.display = "block";
+    document.getElementById("hudName").textContent = name;
+    document.getElementById("hudLevel").textContent = currentCharacter.level || 1;
+
+    localNameTag = createNameTag(name, currentCharacter.level || 1, true);
+    localNameTag.style.color = currentCharacter.nameColor || "#00ff88";
+
+    gameActive = true;
+    document.getElementById("coordsPanel").style.display = "block";
+
+    lastMovementTime = Date.now();
+    freeLookYaw = currentCharacter.rot || 0;
+
+    await loadPlayerModel(currentCharacter.race, currentCharacter.gender);
+
+    // Safety fallback
+    if (!playerModel) {
+        console.error("❌ Player model failed to load — using fallback");
+        createFallbackPlayer();
+    }
+
+    // Restore last saved position + rotation
+    if (currentCharacter.x !== undefined) playerModel.position.x = currentCharacter.x;
+    if (currentCharacter.z !== undefined) playerModel.position.z = currentCharacter.z;
+    if (currentCharacter.rot !== undefined) {
+        playerModel.rotation.y = currentCharacter.rot;
+        freeLookYaw = currentCharacter.rot;
+    }
+
+    // Snap to terrain
+    const surfaceY = getTerrainHeight(playerModel.position.x, playerModel.position.z);
+    playerModel.position.y = surfaceY + 12;
+    updateDynamicGrass();   // initial population
+    updateShadowCamera();   // initial shadow map
+    lastGrassCenterX = playerModel.position.x;
+    lastGrassCenterZ = playerModel.position.z;
+
+    console.log(`📍 Restored position: ${playerModel.position.x.toFixed(1)}, ${playerModel.position.z.toFixed(1)}`);
+    console.log(`🌿 Dynamic grass system ready`);
+
+    // === CRITICAL: Start multiplayer ===
+    initSocket();
+    socket.emit("requestWorld");
+}
+
+function logout() {
+    saveCharacter();
+    if (socket) socket.disconnect();
+    Object.keys(otherPlayers).forEach((id) => removeOtherPlayer(id));
+    otherPlayers = {};
+    // Clean up your own model so it doesn't ghost in the scene
+    if (playerModel) {
+        scene.remove(playerModel);
+        playerModel = null;
+    }
+    if (localNameTag && localNameTag.parentNode)
+        localNameTag.parentNode.removeChild(localNameTag);
+    localNameTag = null;
+    document.getElementById("coordsPanel").style.display = "none";
+    gameActive = false;
+    document.getElementById("hud").style.display = "none";
+    document.getElementById("instructions").style.display = "none";
+    document.getElementById("chatContainer").style.display = "none";
+    document.getElementById("accountScreen").style.display = "flex";
+}
+
+// Full camera + movement
+const keys = {};
+let isRightMouse = false,
+    isLeftMouse = false;
+let freeLookYaw = 0,
+    freeLookPitch = 0,
+    cameraPitch = 0;
+let cameraDistance = 125;
+const moveSpeed = 1.6,
+    turnSpeed = 0.022;
+let velocityY = 0,
+    isJumping = false;
+let horizontalVelocity = new THREE.Vector3();
+
+function normalizeAngle(a) {
+    a = a % (Math.PI * 2);
+    if (a < -Math.PI) a += Math.PI * 2;
+    if (a > Math.PI) a -= Math.PI * 2;
+    return a;
+}
+
+window.addEventListener("keydown", (e) => {
+    if (!gameActive) return;
+
+    // Enter to focus chat
+    if (
+        e.key === "Enter" &&
+        document.activeElement !== document.getElementById("chatInput")
+    ) {
+        document.getElementById("chatInput").focus();
+        e.preventDefault();
+        return;
+    }
+
+    // Level Editor toggle
+    if (e.key.toLowerCase() === "l") {
+        editorMode = !editorMode;
+        document.getElementById("editorPanel").style.display = editorMode
+            ? "block"
+            : "none";
+
+        if (editorMode && document.pointerLockElement) {
+            document.exitPointerLock();
+        }
+        if (!editorMode) deselect();
+        return;
+    }
+
+    // Delete selected tree (works with both Delete and Del keys)
+    if (
+        editorMode &&
+        (e.key === "Delete" || e.key === "Del") &&
+        selectedId
+    ) {
+        if (socket) socket.emit("removeTree", selectedId);
+        deselect();
+        return;
+    }
+
+    // Normal movement keys
+    if (document.activeElement !== document.getElementById("chatInput")) {
+        keys[e.key.toLowerCase()] = true;
+        lastMovementTime = Date.now();
+    }
+});
+
+const canvas = renderer.domElement;
+
+// === Tree + Sculpting + Water Mouse Handlers ===
+canvas.addEventListener("mousedown", (e) => {
+    if (
+        !gameActive ||
+        !editorMode ||
+        document.activeElement === document.getElementById("chatInput")
+    ) return;
+
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    // Priority 1: Tree selection (always allowed)
+    const treeMeshes = trees.flatMap((t) => t.group.children);
+    const treeIntersects = raycaster.intersectObjects(treeMeshes, false);
+    if (treeIntersects.length > 0) {
+        const hitId = treeIntersects[0].object.parent.userData.id;
+        selectTree(hitId);
+        return;
+    }
+
+    // Priority 2: Water BODY SELECTION – only when NOT sculpting terrain
+    // (and only if not currently drawing a new water body)
+    if (!isTerrainSculptMode() && !waterMode) {
+        const waterMeshes = waters.map((w) => w.mesh);
+        const waterIntersects = raycaster.intersectObjects(waterMeshes, false);
+        if (waterIntersects.length > 0) {
+            const hitMesh = waterIntersects[0].object;
+            const waterObj = waters.find((w) => w.mesh === hitMesh);
+            if (waterObj) {
+                selectWater(waterObj.id);
+                return;
+            }
+        }
+    }
+
+    // Priority 3: Water DRAWING / COMPLETION (only in water mode)
+    if (waterMode) {
+        const groundIntersects = raycaster.intersectObject(ground);
+        if (groundIntersects.length === 0) return;
+        const point = groundIntersects[0].point;
+
+        if (e.button === 0) { // Left → add point
+            currentWaterPoints.push({ x: point.x, z: point.z });
+            updateWaterPreview();
+            return;
+        }
+        else if (e.button === 2) { // Right → finish polygon
+            if (currentWaterPoints.length >= 3) {
+                if (socket) {
+                    let totalHeight = 0;
+                    currentWaterPoints.forEach(
+                        (p) => (totalHeight += getTerrainHeight(p.x, p.z))
+                    );
+                    const avgHeight = totalHeight / currentWaterPoints.length + 4;
+                    socket.emit("addWaterBody", {
+                        points: currentWaterPoints,
+                        level: avgHeight,
+                    });
+                }
+                currentWaterPoints = [];
+                if (waterPreviewLine) {
+                    scene.remove(waterPreviewLine);
+                    waterPreviewLine = null;
+                }
+            }
+            return;  // ← important: consume the event so it doesn't fall through
+        }
+    }
+
+    // Priority 4: Terrain sculpting + tree placement (fallback)
+    const groundIntersects = raycaster.intersectObject(ground);
+    if (groundIntersects.length === 0) return;
+
+    if (e.button === 0) { // Left → sculpt
+        isSculpting = true;
+        saveUndoState();
+        sculptAtMouse(e);
+    }
+    else if (e.button === 2) { // Right → place tree (only if not in water mode)
+        if (!waterMode) {
+            const point = groundIntersects[0].point;
+            if (socket) socket.emit("addTree", { x: point.x, z: point.z });
+        }
+    }
+});
+
+canvas.addEventListener("mousemove", (e) => {
+    if (!isSculpting || !editorMode) return;
+    sculptAtMouse(e);
+});
+
+window.addEventListener("mouseup", () => {
+    if (isSculpting) {
+        isSculpting = false;
+        if (socket) {
+            socket.emit("updateTerrain", Array.from(terrainHeights));
+            console.log(
+                "💾 Terrain changes saved to world.json + sent to all players",
+            );
+        }
+    }
+});
+
+// Prevent right-click menu when in editor
+canvas.addEventListener("contextmenu", (e) => {
+    if (editorMode) e.preventDefault();
+});
+
+window.addEventListener("keyup", (e) => {
+    if (
+        gameActive &&
+        document.activeElement !== document.getElementById("chatInput")
+    )
+        keys[e.key.toLowerCase()] = false;
+});
+
+// Wheel zoom - now IGNORES zoom when mouse is over chat
+window.addEventListener("wheel", (e) => {
+    if (gameActive && !isHoveringChat) {
+        cameraDistance += e.deltaY * 0.1;
+        cameraDistance = Math.max(60, Math.min(280, cameraDistance));
+    }
+});
+
+canvas.addEventListener("mousedown", (e) => {
+    if (
+        !gameActive ||
+        document.activeElement === document.getElementById("chatInput") ||
+        editorMode // ← NEW LINE
+    )
+        return;
+    lastMovementTime = Date.now();
+    if (e.button === 2) {
+        isRightMouse = true;
+        canvas.requestPointerLock();
+        const dx = camera.position.x - playerModel.position.x,
+            dz = camera.position.z - playerModel.position.z;
+        const hd = Math.sqrt(dx * dx + dz * dz) || 1,
+            dy = camera.position.y - (playerModel.position.y + 55);
+        cameraPitch = Math.atan2(dy, hd);
+        playerModel.rotation.y = Math.atan2(dx, dz);
+    }
+    if (e.button === 0) {
+        isLeftMouse = true;
+        canvas.requestPointerLock();
+        const dx = camera.position.x - playerModel.position.x,
+            dz = camera.position.z - playerModel.position.z;
+        const hd = Math.sqrt(dx * dx + dz * dz) || 1,
+            dy = camera.position.y - (playerModel.position.y + 55);
+        freeLookYaw = Math.atan2(dx, dz);
+        freeLookPitch = Math.atan2(dy, hd);
+    }
+});
+
+window.addEventListener("mouseup", () => {
+    if (!gameActive) return;
+    if (isRightMouse) {
+        freeLookYaw = playerModel.rotation.y;
+        freeLookPitch = cameraPitch;
+    }
+    isRightMouse = isLeftMouse = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+});
+
+window.addEventListener("mousemove", (e) => {
+    if (
+        !gameActive ||
+        !document.pointerLockElement ||
+        document.activeElement === document.getElementById("chatInput")
+    )
+        return;
+    lastMovementTime = Date.now();
+    if (isRightMouse) {
+        playerModel.rotation.y -= e.movementX * 0.0028;
+        cameraPitch += e.movementY * 0.022;
+        cameraPitch = Math.max(-1.45, Math.min(1.45, cameraPitch));
+    }
+    if (isLeftMouse) {
+        freeLookYaw -= e.movementX * 0.0028;
+        freeLookPitch += e.movementY * 0.022;
+        freeLookPitch = Math.max(-1.45, Math.min(1.45, freeLookPitch));
+    }
+});
+window.addEventListener("contextmenu", (e) => e.preventDefault());
+
+function animate() {
+    requestAnimationFrame(animate);
+    if (!gameActive) {
+        renderer.render(scene, camera);
+        return;
+    }
+
+    if (playerModel && playerModel.userData.mixer) playerModel.userData.mixer.update(0.016);
+    if (!playerModel) return;                     // safety while loading
+
+    const isTyping =
+        document.activeElement === document.getElementById("chatInput");
+
+    if (!isTyping) {
+        // Bird movement direction depends on control mode
+        let forward, right;
+
+        // Container now has the correct facing baked in — no extra correction needed
+        const MODEL_OFFSET = 0;
+
+        if (isRightMouse) {
+            // Right-click mode: bird faces exactly where the camera is pointing
+            forward = new THREE.Vector3(0, 0, -1).applyQuaternion(playerModel.quaternion);
+            right = new THREE.Vector3(1, 0, 0).applyQuaternion(playerModel.quaternion);
+        } else {
+            // Normal WASD mode: bird moves in the direction its nose is pointing
+            forward = new THREE.Vector3(0, 0, -1)
+                .applyQuaternion(playerModel.quaternion)
+                .applyAxisAngle(new THREE.Vector3(0, 1, 0), MODEL_OFFSET);
+            right = new THREE.Vector3(1, 0, 0)
+                .applyQuaternion(playerModel.quaternion)
+                .applyAxisAngle(new THREE.Vector3(0, 1, 0), MODEL_OFFSET);
+        }
+        let input = new THREE.Vector3();
+        if (keys["w"]) input.addScaledVector(forward, moveSpeed);
+        if (keys["s"]) input.addScaledVector(forward, -moveSpeed * 0.5);
+        if (keys["q"]) input.addScaledVector(right, -moveSpeed);
+        if (keys["e"]) input.addScaledVector(right, moveSpeed);
+        if (input.length() > 0) input.normalize().multiplyScalar(moveSpeed);
+
+        if (!isJumping) horizontalVelocity.copy(input);
+        playerModel.position.add(horizontalVelocity);
+
+        if (keys["a"]) {
+            playerModel.rotation.y += turnSpeed;
+            if (!isLeftMouse && !isRightMouse) {
+                freeLookYaw += turnSpeed;
+            }
+        }
+        if (keys["d"]) {
+            playerModel.rotation.y -= turnSpeed;
+            if (!isLeftMouse && !isRightMouse) {
+                freeLookYaw -= turnSpeed;
+            }
+        }
+
+        if (keys[" "] && !isJumping) {
+            velocityY = 1.6;
+            isJumping = true;
+        }
+        velocityY -= 0.042;
+        playerModel.position.y += velocityY;
+
+        // === ACCURATE MESH COLLISION (no more clipping/springing) ===
+        const surfaceY = getTerrainHeight(
+            playerModel.position.x,
+            playerModel.position.z,
+        );
+
+        if (playerModel.position.y - 1 < surfaceY) {   // ← tuned for bird
+            playerModel.position.y = surfaceY + 1;
+            velocityY = 0;
+            isJumping = false;
+        }
+    }
+
+    if (socket && Date.now() - lastUpdateTime > UPDATE_RATE) {
+        const isAFK = Date.now() - lastMovementTime > AFK_TIMEOUT;
+        socket.emit("playerUpdate", {
+            x: playerModel.position.x,
+            y: playerModel.position.y,
+            z: playerModel.position.z,
+            rot: playerModel.rotation.y,
+            isAFK: isAFK,
+        });
+        lastUpdateTime = Date.now();
+    }
+
+    Object.values(otherPlayers).forEach((p) => {
+        if (!p.model || p.targetX === undefined) return;
+        p.model.position.x = lerp(p.model.position.x, p.targetX, 0.25);
+        p.model.position.y = lerp(p.model.position.y, p.targetY, 0.25);
+        p.model.position.z = lerp(p.model.position.z, p.targetZ, 0.25);
+        p.model.rotation.y = lerp(p.model.rotation.y, p.targetRot, 0.25);
+
+        if (p.model.userData.mixer) p.model.userData.mixer.update(0.016);
+    });
+
+    const dist = cameraDistance;
+    let yaw, pitch;
+    if (isLeftMouse) {
+        yaw = freeLookYaw;
+        pitch = freeLookPitch;
+    } else if (isRightMouse) {
+        yaw = playerModel.rotation.y;
+        pitch = cameraPitch;
+    } else {
+        yaw = freeLookYaw;
+        pitch = freeLookPitch;
+    }
+
+    const cameraOffset = new THREE.Vector3(
+        dist * Math.sin(yaw) * Math.cos(pitch),
+        55 + dist * Math.sin(pitch),
+        dist * Math.cos(yaw) * Math.cos(pitch),
+    );
+    camera.position.copy(playerModel.position).add(cameraOffset);
+    if (camera.position.y < playerModel.position.y + 5)
+        camera.position.y = playerModel.position.y + 5;
+    camera.lookAt(
+        playerModel.position.x,
+        playerModel.position.y + 40,
+        playerModel.position.z,
+    );
+
+    updateNameTags();
+    updateCoordsDisplay();
+    // Water ripple animation
+    const time = Date.now() * 0.001;
+    waters.forEach((w) => {
+        if (!w.mesh.userData.originalVertices) return;
+        const verts = w.mesh.geometry.attributes.position.array;
+        for (let i = 0; i < verts.length; i += 3) {
+            const orig = w.mesh.userData.originalVertices[i + 1];
+            verts[i + 1] =
+                orig + Math.sin(time * 3 + w.mesh.userData.timeOffset + i) * 0.6;
+        }
+        w.mesh.geometry.attributes.position.needsUpdate = true;
+    });
+
+    updateShadowCamera();   // ← this makes shadows follow you instantly
+
+    // Grass wind
+    if (grassMesh && grassMaterial.uniforms.time) {
+        grassMaterial.uniforms.time.value = performance.now() * 0.001;
+    }
+
+    // Regenerate local grass when player moves far
+    updateDynamicGrass();
+
+    // Grass chunked rebuild
+    if (isRebuildingGrass) processGrassChunk();
+
+    renderer.render(scene, camera);
+}
+
+function setupUI() {
+    document
+        .getElementById("accountContinue")
+        .addEventListener("click", () => {
+            currentAccount =
+                document.getElementById("accountName").value.trim() || "Guest";
+            document.getElementById("accountScreen").style.display = "none";
+            showCharacterList();
+        });
+
+    function showCharacterList() {
+        const container = document.getElementById("charList");
+        container.innerHTML = "";
+        const chars = loadAllCharacters();
+        if (chars.length === 0) {
+            container.innerHTML = "<p>No characters yet.</p>";
+        } else {
+            chars.forEach((char) => {
+                const btn = document.createElement("button");
+                btn.textContent = `${char.name} — ${char.race} ${char.gender} (Lv ${char.level || 1})`;
+                btn.onclick = () => {
+                    if (loadCharacter(char.name)) {
+                        document.getElementById("charListScreen").style.display =
+                            "none";
+                        startGame(char.name);
+                    }
+                };
+                container.appendChild(btn);
+            });
+        }
+        document.getElementById("currentAccount").textContent =
+            currentAccount;
+        document.getElementById("charListScreen").style.display = "flex";
+    }
+
+    document
+        .getElementById("createNewBtn")
+        .addEventListener("click", () => {
+            document.getElementById("charListScreen").style.display = "none";
+            document.getElementById("creationScreen").style.display = "flex";
+            document.getElementById("createName").focus();
+        });
+
+    document.querySelectorAll(".race-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            selectedRace = btn.dataset.race;
+            document
+                .querySelectorAll(".race-btn")
+                .forEach((b) => b.classList.remove("selected"));
+            btn.classList.add("selected");
+        });
+    });
+
+    document.querySelectorAll(".gender-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            selectedGender = btn.dataset.gender;
+            document
+                .querySelectorAll(".gender-btn")
+                .forEach((b) => b.classList.remove("selected"));
+            btn.classList.add("selected");
+        });
+    });
+
+    document
+        .getElementById("enterWorldBtn")
+        .addEventListener("click", () => {
+            const name = document.getElementById("createName").value.trim();
+            if (!name) return alert("Please enter a character name");
+            if (!selectedRace || !selectedGender)
+                return alert("Please select both race and gender");
+
+            currentCharacter = {
+                name,
+                race: selectedRace,
+                gender: selectedGender,
+                level: 1,
+                xp: 0,
+                inventory: [],
+                deathStatus: false,
+                x: 0,
+                z: 0,
+                rot: 0,
+                lastPlayed: Date.now(),
+            };
+            const spawn = raceSpawns[selectedRace] || { x: 0, z: 0 };
+            currentCharacter.x = spawn.x;
+            currentCharacter.z = spawn.z;
+            // Bird model uses its own materials from .glb — no .material.color needed
+            saveCharacter();
+            document.getElementById("creationScreen").style.display = "none";
+            startGame(name);
+        });
+
+    document.getElementById("logoutBtn").addEventListener("click", logout);
+
+    document
+        .getElementById("saveNameColorBtn")
+        .addEventListener("click", saveNameColor);
+    document
+        .getElementById("closeNamePanelBtn")
+        .addEventListener("click", hideNameCustomPanel);
+}
+
+let selectedRace = null;
+let selectedGender = null;
+
+function loadAllCharacters() {
+    const list = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith(STORAGE_PREFIX)) {
+            const char = JSON.parse(localStorage.getItem(key));
+            if (char.name) list.push(char);
+        }
+    }
+    return list;
+}
+
+function saveCharacter() {
+    if (!currentCharacter || !gameActive) return;
+    currentCharacter.x = playerModel.position.x;
+    currentCharacter.z = playerModel.position.z;
+    currentCharacter.rot = playerModel.rotation.y;
+    currentCharacter.lastPlayed = Date.now();
+    localStorage.setItem(
+        STORAGE_PREFIX + currentCharacter.name.toLowerCase(),
+        JSON.stringify(currentCharacter),
+    );
+}
+
+function loadCharacter(name) {
+    const key = STORAGE_PREFIX + name.toLowerCase();
+    const saved = localStorage.getItem(key);
+    if (saved) {
+        currentCharacter = JSON.parse(saved);
+        currentCharacter.level = currentCharacter.level || 1;
+        currentCharacter.xp =
+            currentCharacter.xp !== undefined ? currentCharacter.xp : 0;
+        currentCharacter.inventory = currentCharacter.inventory || [];
+        currentCharacter.deathStatus =
+            currentCharacter.deathStatus !== undefined
+                ? currentCharacter.deathStatus
+                : false;
+        // Position will be applied in startGame() AFTER the model loads
+        console.log("Loaded character:", currentCharacter);
+        return true;
+    }
+    return false;
+}
+// ==================== SCULPTING UI SETUP ====================
+function setupSculptingUI() {
+    const tools = ["Raise", "Lower", "Flatten", "Smooth"];
+    tools.forEach((mode) => {
+        const btn = document.getElementById("btn" + mode);
+        if (btn) {
+            btn.addEventListener("click", () => {
+                sculptMode = mode.toLowerCase();
+                document
+                    .querySelectorAll(".tool-btn")
+                    .forEach((b) => b.classList.remove("selected"));
+                btn.classList.add("selected");
+            });
+        }
+    });
+
+    document.getElementById("brushSize").addEventListener("input", (e) => {
+        brushSize = parseFloat(e.target.value);
+        document.getElementById("sizeValue").textContent = brushSize;
+    });
+
+    document
+        .getElementById("brushStrength")
+        .addEventListener("input", (e) => {
+            brushStrength = parseFloat(e.target.value);
+            document.getElementById("strengthValue").textContent =
+                brushStrength.toFixed(1);
+        });
+
+    document.getElementById("undoBtn").addEventListener("click", () => {
+        if (undoStack.length === 0 || !socket) return;
+        const previous = undoStack.pop();
+        terrainHeights.set(previous);
+
+        const positions = groundGeo.attributes.position.array;
+        for (let i = 0; i < terrainHeights.length; i++) {
+            positions[i * 3 + 2] = terrainHeights[i];
+        }
+        groundGeo.attributes.position.needsUpdate = true;
+        groundGeo.computeVertexNormals();
+
+        // Snap trees & player
+        trees.forEach((t) => {
+            t.group.position.y = getTerrainHeight(
+                t.group.position.x,
+                t.group.position.z,
+            );
+        });
+        const py = getTerrainHeight(
+            playerModel.position.x,
+            playerModel.position.z,
+        );
+        playerModel.position.y = py + 15;
+        updateDynamicGrass();
+        terrainVersion++;
+        socket.emit("updateTerrain", Array.from(terrainHeights));
+    });
+    // Water tool button
+    const waterBtn = document.getElementById("btnWater");
+    if (waterBtn) {
+        waterBtn.addEventListener("click", () => {
+            sculptMode = null;
+            waterMode = !waterMode;
+            document
+                .querySelectorAll(".tool-btn")
+                .forEach((b) => b.classList.remove("selected"));
+            if (waterMode) waterBtn.classList.add("selected");
+            currentWaterPoints = [];
+            if (waterPreviewLine) {
+                scene.remove(waterPreviewLine);
+                waterPreviewLine = null;
+            }
+        });
+    }
+
+    // Water level slider
+    const levelSlider = document.getElementById("waterLevelSlider");
+    if (levelSlider) {
+        levelSlider.addEventListener("input", (e) => {
+            if (!selectedWaterId || !socket) return;
+            const newLevel = parseFloat(e.target.value);
+            document.getElementById("waterLevelValue").textContent = newLevel;
+            socket.emit("updateWaterLevel", {
+                id: selectedWaterId,
+                level: newLevel - 12,
+            });
+        });
+    }
+}
+
+// ────────────────────────────────────────────────
+//  Draggable Editor Panel
+// ────────────────────────────────────────────────
+function makeDraggable(element) {
+    let isDragging = false;
+    let currentX;
+    let currentY;
+    let initialX;
+    let initialY;
+
+    // We'll use the h2 as the drag handle (you can change this)
+    const header = element.querySelector("h2");
+
+    function dragStart(e) {
+        // Only allow dragging from the header (not from inputs/sliders/buttons)
+        if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON" ||
+            e.target.closest("input, button, label")) {
+            return;
+        }
+
+        if (e.type === "touchstart") {
+            initialX = e.touches[0].clientX - currentX;
+            initialY = e.touches[0].clientY - currentY;
+        } else {
+            initialX = e.clientX - currentX;
+            initialY = e.clientY - currentY;
+        }
+
+        isDragging = true;
+        element.style.cursor = "grabbing";
+    }
+
+    function dragEnd() {
+        isDragging = false;
+        element.style.cursor = "grab";
+    }
+
+    function drag(e) {
+        if (isDragging) {
+            e.preventDefault();
+
+            if (e.type === "touchmove") {
+                currentX = e.touches[0].clientX - initialX;
+                currentY = e.touches[0].clientY - initialY;
+            } else {
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+            }
+
+            // Keep within viewport (optional but recommended)
+            const rect = element.getBoundingClientRect();
+            currentX = Math.max(20, Math.min(window.innerWidth - rect.width - 20, currentX));
+            currentY = Math.max(20, Math.min(window.innerHeight - rect.height - 20, currentY));
+
+            element.style.left = currentX + "px";
+            element.style.top = currentY + "px";
+            element.style.transform = "none";   // disable centering transform
+        }
+    }
+
+    // Initialize position
+    currentX = window.innerWidth / 2 - element.offsetWidth / 2;
+    currentY = window.innerHeight / 2 - element.offsetHeight / 2;
+
+    // Mouse events
+    header.addEventListener("mousedown", dragStart);
+    document.addEventListener("mousemove", drag);
+    document.addEventListener("mouseup", dragEnd);
+
+    // Touch support (mobile/tablet)
+    header.addEventListener("touchstart", dragStart, { passive: false });
+    document.addEventListener("touchmove", drag, { passive: false });
+    document.addEventListener("touchend", dragEnd);
+
+    // Optional: visual feedback when hovering header
+    header.style.cursor = "grab";
+    header.addEventListener("mouseenter", () => {
+        if (!isDragging) header.style.cursor = "grab";
+    });
+}
+
+// Apply to editor panel
+const editorPanel = document.getElementById("editorPanel");
+if (editorPanel) {
+    makeDraggable(editorPanel);
+}
+setupUI();
+setupSculptingUI();
+animate();
+
+// Chat (no persistence) + hover detection for wheel zoom
+const chatContainer = document.getElementById("chatContainer");
+const chatInput = document.getElementById("chatInput");
+
+chatContainer.addEventListener("mouseenter", () => {
+    isHoveringChat = true;
+});
+chatContainer.addEventListener("mouseleave", () => {
+    isHoveringChat = false;
+});
+
+chatInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+        const msg = chatInput.value.trim();
+        if (msg && socket) {
+            socket.emit("chatMessage", msg);
+            addChatMessage(currentCharacter.name, msg);
+        }
+        chatInput.value = "";
+        chatInput.blur();
+    }
+});
+
+window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+document.getElementById("deleteBtn").addEventListener("click", () => {
+    if (selectedId && socket) {
+        socket.emit("removeTree", selectedId);
+        deselect();
+    } else if (selectedWaterId && socket) {
+        socket.emit("removeWaterBody", selectedWaterId);
+        deselectWater();
+    }
+});

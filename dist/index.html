@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Mini Azeroth 3D - Phase 2.5 Polished</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, sans-serif;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #uiOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 200;
+      pointer-events: none;
+    }
+
+    .screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(8, 20, 8, 0.97);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #0f0;
+    }
+
+    .panel {
+      background: rgba(0, 0, 0, 0.92);
+      border: 3px solid #0f0;
+      padding: 40px 70px;
+      text-align: center;
+      box-shadow: 0 0 50px #0f0;
+      pointer-events: all;
+      max-width: 500px;
+    }
+
+    h1 {
+      font-size: 48px;
+      margin: 0 0 25px 0;
+      text-shadow: 0 0 15px #0f0;
+    }
+
+    input,
+    button {
+      padding: 14px 20px;
+      font-size: 18px;
+      margin: 8px;
+    }
+
+    input {
+      width: 320px;
+      background: #111;
+      border: 2px solid #0f0;
+      color: #0f0;
+    }
+
+    button {
+      background: #0f0;
+      color: #000;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #0a0;
+    }
+
+    button.selected {
+      background: #0a0;
+      border: 3px solid #ff0;
+      box-shadow: 0 0 15px #ff0;
+    }
+
+    .char-list button {
+      width: 100%;
+      margin: 6px 0;
+      text-align: left;
+      padding: 12px 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px solid #0f0;
+    }
+
+    .char-list button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    #hud {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(0, 0, 0, 0.85);
+      border: 2px solid #0f0;
+      padding: 10px 18px;
+      color: #0f0;
+      display: none;
+      z-index: 150;
+      font-size: 16px;
+    }
+
+    #logoutBtn {
+      margin-left: 20px;
+      background: #400;
+      color: #faa;
+      border: 1px solid #f66;
+      cursor: pointer;
+    }
+
+    #instructions {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #0f0;
+      background: rgba(0, 0, 0, 0.9);
+      padding: 15px;
+      border: 2px solid #0f0;
+      z-index: 100;
+      line-height: 1.5;
+      max-width: 420px;
+    }
+
+    #coordsPanel {
+      position: absolute;
+      top: 120px;
+      left: 12px;
+      background: rgba(0, 0, 0, 0.88);
+      border: 2px solid #0f0;
+      padding: 12px 18px;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 15px;
+      line-height: 1.45;
+      border-radius: 4px;
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+      display: none;
+      z-index: 150;
+      min-width: 165px;
+      pointer-events: none;
+    }
+
+    #editorPanel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.95);
+      border: 3px solid #ff0;
+      padding: 25px 40px;
+      color: #ff0;
+      font-family: monospace;
+      text-align: center;
+      display: none;
+      z-index: 300;
+      box-shadow: 0 0 40px #ff0;
+      pointer-events: auto;
+      min-width: 320px;
+      user-select: none;
+      /* prevents text selection while dragging */
+      -webkit-user-select: none;
+      touch-action: none;
+      /* helps with touch dragging */
+      cursor: default;
+    }
+
+    #editorPanel h2 {
+      margin: 0 0 15px 0;
+      color: #ff0;
+      text-shadow: 0 0 10px #ff0;
+      padding: 8px 12px;
+      border-bottom: 2px solid #ff0;
+      background: rgba(40, 40, 0, 0.4);
+      margin: -25px -40px 20px -40px;
+      /* extends to edges */
+    }
+
+    #deleteBtn {
+      background: #400;
+      color: #faa;
+      border: 2px solid #f66;
+      padding: 12px 30px;
+      font-size: 18px;
+      margin-top: 15px;
+      cursor: pointer;
+    }
+
+    #deleteBtn:hover {
+      background: #600;
+    }
+
+    #nameCustomPanel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.96);
+      border: 3px solid #0f0;
+      padding: 30px;
+      color: #0f0;
+      display: none;
+      z-index: 250;
+      width: 340px;
+      text-align: center;
+      box-shadow: 0 0 40px #0f0;
+    }
+  </style>
+  <script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/"
+  }
+}
+</script>
+  <script type="module" crossorigin src="/assets/index-CKgZPW4u.js"></script>
+</head>
+
+<body>
+  <div id="uiOverlay">
+    <!-- Account Login -->
+    <div id="accountScreen" class="screen">
+      <div class="panel">
+        <h1>Mini Azeroth</h1>
+        <p>Enter Account Name</p>
+        <input type="text" id="accountName" placeholder="e.g. WoozyWheezy" maxlength="30" />
+        <br /><br />
+        <button id="accountContinue">CONTINUE</button>
+      </div>
+    </div>
+
+    <!-- Character List -->
+    <div id="charListScreen" class="screen" style="display: none">
+      <div class="panel">
+        <h1>My Characters</h1>
+        <p>Account: <b id="currentAccount"></b></p>
+        <div id="charList" class="char-list"></div>
+        <br />
+        <button id="createNewBtn" style="background: #060">
+          Create New Character
+        </button>
+      </div>
+    </div>
+
+    <!-- Creation -->
+    <div id="creationScreen" class="screen" style="display: none">
+      <div class="panel">
+        <h1>Character Creation</h1>
+        <p>Account: <b id="currentAccountCreate"></b></p>
+        <h3>Character Name</h3>
+        <input type="text" id="createName" placeholder="Character Name" maxlength="20" />
+        <h3>Race</h3>
+        <button class="race-btn" data-race="Human">Human</button>
+        <button class="race-btn" data-race="Orc">Orc</button>
+        <button class="race-btn" data-race="Forsaken">Forsaken</button>
+        <button class="race-btn" data-race="Night Elf">Night Elf</button>
+        <h3>Gender</h3>
+        <button class="gender-btn" data-gender="Male">Male</button>
+        <button class="gender-btn" data-gender="Female">Female</button>
+        <br /><br />
+        <button id="enterWorldBtn" style="background: #060; padding: 16px 60px; font-size: 20px">
+          ENTER AZEROTH
+        </button>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div id="chatContainer" style="
+          display: none;
+          position: absolute;
+          bottom: 20px;
+          left: 20px;
+          width: 420px;
+          background: rgba(0, 0, 0, 0.92);
+          border: 2px solid #0f0;
+          border-radius: 6px;
+          z-index: 180;
+          overflow: hidden;
+          pointer-events: auto;
+        ">
+      <div id="chatMessages" style="
+            height: 220px;
+            overflow-y: auto;
+            padding: 12px;
+            color: #0f0;
+            font-size: 15px;
+            line-height: 1.4;
+          "></div>
+      <input id="chatInput" type="text" placeholder="Press ENTER to chat..." style="
+            width: 100%;
+            background: #111;
+            border: none;
+            border-top: 2px solid #0f0;
+            padding: 12px;
+            color: #0f0;
+            font-size: 16px;
+            outline: none;
+            pointer-events: auto;
+          " />
+    </div>
+
+    <!-- Name tags -->
+    <div id="nameTagsContainer" style="
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          z-index: 170;
+        "></div>
+
+    <!-- Level Editor Panel -->
+    <div id="editorPanel">
+      <h2>🌲 LEVEL EDITOR ACTIVE</h2>
+
+      <!-- New sculpting toolbar -->
+      <div style="
+            margin: 15px 0;
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            justify-content: center;
+          ">
+        <button id="btnRaise" class="tool-btn selected">▲ Raise</button>
+        <button id="btnLower" class="tool-btn">▼ Lower</button>
+        <button id="btnFlatten" class="tool-btn">▬ Flatten</button>
+        <button id="btnSmooth" class="tool-btn">⟳ Smooth</button>
+        <button id="btnWater" class="tool-btn">💧 Water</button>
+      </div>
+
+      <div style="margin: 12px 0; text-align: left; font-size: 14px">
+        <label>Brush Size: <span id="sizeValue">25</span></label>
+        <input type="range" id="brushSize" min="5" max="80" value="25" style="width: 100%" />
+
+        <label style="margin-top: 8px; display: block">Strength: <span id="strengthValue">2.5</span></label>
+        <input type="range" id="brushStrength" min="0.5" max="8" step="0.1" value="2.5" style="width: 100%" />
+      </div>
+
+      <button id="undoBtn" style="background: #440; color: #ff0; margin: 8px 0">
+        ↩ UNDO LAST EDIT
+      </button>
+      <br /><br />
+      <p style="margin: 8px 0; font-size: 13px; opacity: 0.85">
+        Left-click + drag = sculpt terrain<br />
+        Right-click ground = place tree<br />
+        💧 Water mode: Left-click = add point • Right-click = finish<br />
+        Click water = select • Drag slider = adjust water level
+      </p>
+
+      <!-- Water level slider (appears when water selected) -->
+      <div id="waterLevelContainer" style="display: none; margin: 12px 0">
+        <label>Water Level: <span id="waterLevelValue">600</span></label>
+        <input type="range" id="waterLevelSlider" step="1" style="width: 100%" />
+      </div>
+
+      <button id="deleteBtn">DELETE SELECTED</button>
+      <br /><br />
+      <small>Press L to close editor</small>
+    </div>
+  </div>
+
+  <!-- Name Color Picker -->
+  <div id="nameCustomPanel">
+    <h2>Customize Your Name Tag</h2>
+    <p>Pick your name color:</p>
+    <input type="color" id="nameColorPicker" value="#00ff88"
+      style="width: 180px; height: 50px; border: none; background: #111" />
+    <br /><br />
+    <button id="saveNameColorBtn" style="padding: 12px 40px">
+      SAVE COLOR
+    </button>
+    <button id="closeNamePanelBtn" style="
+          background: #400;
+          color: #faa;
+          padding: 12px 30px;
+          margin-left: 15px;
+        ">
+      CANCEL
+    </button>
+  </div>
+
+  <div id="hud">
+    <span id="charInfo">Character: <b id="hudName"></b> • Lv <b id="hudLevel">1</b></span>
+    <button id="logoutBtn">Logout</button>
+  </div>
+
+  <div id="instructions" style="display: none">
+    <b>Phase 2.5 Complete ✓</b><br />
+    Nametags follow heads perfectly • Color changes instant • AFK visible to
+    all • Fade + full disappear
+  </div>
+
+  <div id="coordsPanel">
+    <div style="margin-bottom: 6px; color: #0f8; font-weight: bold">
+      COORDINATES
+    </div>
+    X: <span id="posX">0.0</span><br />
+    Y: <span id="posY">15.0</span><br />
+    Z: <span id="posZ">0.0</span><br />
+    Facing:
+    <span id="facing" style="color: #ff0; font-weight: bold">North</span>
+  </div>
+
+
+
+  <script src="/socket.io/socket.io.js"></script>
+
+</body>
+
+</html>
